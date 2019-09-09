@@ -1,0 +1,196 @@
+/*
+Copyright IBM Corp. 2016 All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+		 http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+// Note: only proto file can be import here !!!   --Zhiguo  27/09
+//import "github.com/ethereum/go-ethereum/core/types/block.go";
+
+package pbft;
+
+/*
+ * mapping to PBFT paper names
+ *
+ * PBFT name: local name
+ *
+ * o: transaction
+ * t: timestamp
+ * c: client
+ * v: view
+ * n: sequenceNumber
+ * D(m): requestDigest
+ * i: replicaId
+ */
+
+message pbft_message {
+    oneof payload {
+//        request_batch request_batch = 1;    // This one is not used --Zhiguo 27/09
+        pre_prepare pre_prepare = 1;
+        prepare prepare = 2;
+        commit commit = 3;
+        checkpoint checkpoint = 4;
+        view_change view_change = 5;
+        new_view new_view = 6;
+//        fetch_request_batch fetch_request_batch = 7;        // Not used
+//        request_batch return_request_batch = 8;             // Not used
+    }
+}
+
+message request {
+    google.protobuf.Timestamp timestamp = 1;  // Generated at the client level. Ensures that client's requests are atomically ordered.
+    bytes payload = 2;  // opaque payload
+    uint64 replica_id = 3;
+    bytes signature = 4;
+}
+
+message pre_prepare {
+    uint64 view = 1;
+    uint64 sequence_number = 2;
+    bytes block_hash = 3;      /// batch_digest --> block_hash, --Zhiguo 26/09
+    block_msg block_msg  = 4;
+    uint64 replica_id = 5;
+}
+
+message prepare {
+    uint64 view = 1;
+    uint64 sequence_number = 2;
+    bytes block_hash = 3;          ///   Zhiguo 26/09
+    uint64 replica_id = 4;
+}
+
+message commit {
+    uint64 view = 1;
+    uint64 sequence_number = 2;
+    bytes block_hash = 3;
+    uint64 replica_id = 4;
+}
+
+message block_info {
+    uint64 block_number = 1;
+    bytes block_hash = 2;
+}
+
+message checkpoint {
+    uint64 sequence_number = 1;
+    uint64 replica_id = 2;
+    string id = 3;
+}
+
+message view_change {
+    /* This message should go away and become a checkpoint once replica_id is removed */
+    message C {
+        uint64 sequence_number = 1;
+        string id = 3;
+    }
+    message PQ {
+        uint64 sequence_number = 1;
+        string block_hash = 2;
+        uint64 view = 3;
+    }
+
+    uint64 view = 1;
+    uint64 h = 2;
+    repeated C cset = 3;
+    repeated PQ pset = 4;
+    repeated PQ qset = 5;
+    uint64 replica_id = 6;
+    bytes signature = 7;
+}
+
+message PQset {
+    repeated view_change.PQ set = 1;
+}
+
+message new_view {
+    uint64 view = 1;
+    repeated view_change vset = 2;
+    map<uint64, string> xset = 3;
+    uint64 replica_id = 4;
+}
+
+//message fetch_request_batch {
+//    string batch_digest = 1;
+//    uint64 replica_id = 2;
+//}
+
+// batch
+
+//message request_batch {
+//    repeated request batch = 1;
+//};
+
+//message batch_message {
+//    oneof payload {
+//        request request = 1;
+//        request_batch request_batch = 2;
+//        bytes pbft_message = 3;
+//        request complaint = 4;    // like request, but processed everywhere
+//    }
+//}
+
+// consensus metadata
+
+message metadata {
+    uint64 seqNo = 1;
+}
+
+// Block represents an entire block in the Ethereum blockchain.
+message block_msg {
+	header_msg header_msg = 1;
+	repeated transaction_msg transactions = 2;
+}
+message header_msg {
+// Header represents a block header in the Ethereum blockchain.
+	bytes ParentHash = 1;
+	bytes UncleHash = 2;
+	bytes Coinbase  = 3;
+	bytes Root   = 4;
+	bytes TxHash     = 5; 
+	bytes ReceiptHash = 6;
+	bytes Bloom       = 7;
+	int64 Difficulty   = 8;
+	int64 Number      = 9;
+	int64 GasLimit    = 10;
+	int64 GasUsed     = 11;
+	int64 Time        = 12;
+	bytes Extra       = 13;
+	bytes MixDigest   = 14;
+	bytes Nonce       = 15;
+}
+
+message transaction_msg {
+    txdata_msg txdata_msg = 1;
+}
+
+message txdata_msg {
+	int64 AccountNonce = 1;
+	int64 Price = 2;
+	int64 GasLimit     = 3;
+	bytes Recipient    = 4;
+	int64 Amount       = 5;
+	bytes Payload      = 6;
+
+	// Signature values
+	int64 V  = 7;
+	int64 R  = 8;
+	int64 S  = 9;
+
+	// This is only used when marshaling to JSON.
+	bytes Hash = 10;
+}
+
+

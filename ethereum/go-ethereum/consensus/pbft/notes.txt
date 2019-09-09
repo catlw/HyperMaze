@@ -1,0 +1,32 @@
+26/09
+8. Some unknown things:
+1) watermarks, checkpoints (both clique and pbft have it)
+2) Cert and CertStore do not contain any certs.
+3) timer mechanisms---broadcast timer, viewchange timer, softstartTimer, startTimer etc.
+
+7. in pbft-core.go add ProtocolManager, but vscode cannot find its definition. Method to resolve it:
+"~/go/bin/godef -debug -f pbft-core.go eth.ProtocolManager"
+
+find which package is not installed, then install it using goget:
+"go get gopkg.in/fatih/set.v0"
+
+22/09
+6. timer mechanism:
+   timer is created by timerFactory, and it is associated with the Manager of obcBatch,
+so from obcBatch, one can control all timers.
+
+5. we do not need batch, because we process candidate block with PBFT algorithm
+each node sign the block with its key, just like Clique?
+
+4. checkpoint, state related codes should be commented all
+
+
+21/09
+1. in ethereum, no need to execute txs or contracts
+   A candidate block is Finalized and then mined, then is inserted to the blockchain;
+   InsertChain -> State_Processor.Process() -> ApplyMessage(), update state root etc.
+2. in pbft, each transaction/contract is executed after consensus (need to call chaincode.ApplyTransaction)
+   No need to execute/rollback etc. anymore.
+
+3. delete 1 line in pbft-core.go, want to check which parts need for logging
+
