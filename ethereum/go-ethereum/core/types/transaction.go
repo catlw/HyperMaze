@@ -16,13 +16,21 @@
 
 package types
 
+/*
+#cgo LDFLAGS: -L/usr/local/lib -lzk_mint -lff  -lsnark -lstdc++  -lgmp -lgmpxx
+#include "hashcgo.hpp"
+#include <stdlib.h>
+*/
+import "C"
 import (
 	"container/heap"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"math/big"
 	"sync/atomic"
+	"unsafe"
 
 	"github.com/ethereum/go-ethereum/hibe"
 
@@ -46,6 +54,13 @@ var (
 	TxCrossChain uint32 = 3
 )
 
+var (
+	TxConvert  uint32 = 0
+	TxRedeem   uint32 = 1
+	TxDeposit  uint32 = 2
+	TxWithdraw uint32 = 3
+)
+
 var RootAccount common.Address = common.HexToAddress("0xffffffffffffffffffffffffffffffffffffffff")
 
 // deriveSigner makes a *best* guess about which signer to use.
@@ -67,8 +82,17 @@ type Transaction struct {
 }
 
 type txdata struct {
-	TxType       uint32
+	TxCode       uint32 //convert,redeem,deposit,withdraw
+	ZKCMTbal     common.Hash
+	ZKCMTfd      common.Hash
+	ZKValue      uint64
+	ZKSN         common.Hash
+	RootHash     common.Hash
+	ZKProof      []byte
+	ZKEnc        []byte
+	ZKIntEnc     []byte
 	AccountNonce uint64          `json:"nonce"    gencodec:"required"`
+	TxType       uint32          //txnormal txheader txdhihe txcorsschain
 	Price        *big.Int        `json:"gasPrice" gencodec:"required"`
 	GasLimit     *big.Int        `json:"gas"      gencodec:"required"`
 	Sender       *common.Address `json:"from"     rlp:"nil"`
@@ -245,6 +269,12 @@ func NewContractCreation(nonce uint64, amount, gasLimit, gasPrice *big.Int, data
 	return newTransaction(nonce, nil, amount, gasLimit, gasPrice, data)
 }
 
+func newZKTransaction(nonce uint64, to *common.Address, amount, gasLimit, gasPrice *big.Int, data []byte) *Transaction {
+	//newTransaction(nonce, to, amount, gasLimit, gasPrice, data)
+
+	return newTransaction(nonce, to, amount, gasLimit, gasPrice, data)
+}
+
 func newTransaction(nonce uint64, to *common.Address, amount, gasLimit, gasPrice *big.Int, data []byte) *Transaction {
 	if len(data) > 0 {
 		data = common.CopyBytes(data)
@@ -281,7 +311,9 @@ func newTransaction(nonce uint64, to *common.Address, amount, gasLimit, gasPrice
 func (tx *Transaction) SetLevel(level uint32) {
 	tx.data.Level = level
 }
+func main() {
 
+}
 func (tx *Transaction) Headers() []*common.Hash {
 	return tx.data.Headers
 }
@@ -385,6 +417,21 @@ func (tx *Transaction) Hash() common.Hash {
 	v := rlpHash(tx)
 	tx.hash.Store(v)
 	return v
+}
+
+func (tx *Transaction) ZKHash() common.Hash {
+	if hash := tx.hash.Load(); hash != nil {
+		return hash.(common.Hash)
+	}
+	SNString := C.CString(common.ToHex(tx.data.ZKSN.Bytes()))
+	defer C.free(unsafe.Pointer(SNString))
+	size := C.ulong(len(tx.data.ZKSN.Bytes()))
+	hashString := C.hash(SNString, size)
+	hashGo := C.GoString(hashString)
+	hashbytes, _ := hex.DecodeString(hashGo)
+	hash := common.BytesToHash(hashbytes)
+	tx.hash.Store(hash)
+	return hash
 }
 
 // SigHash returns the hash to be signed by the sender.
