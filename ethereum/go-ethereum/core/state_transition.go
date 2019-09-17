@@ -23,8 +23,10 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
-	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/log"
+
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -76,6 +78,9 @@ type Message interface {
 	Nonce() uint64
 	CheckNonce() bool
 	Data() []byte
+	TxCode() uint32
+	CMT() *common.Hash
+	ZKValue() uint64
 }
 
 // IntrinsicGas computes the 'intrinsic gas' for a message
@@ -214,7 +219,8 @@ func (st *StateTransition) TransitionDb() (ret []byte, requiredGas, usedGas *big
 	}
 	msg := st.msg
 	sender := st.from() // err checked in preCheck
-
+	txCode := msg.TxCode()
+	cmt := msg.CMT()
 	homestead := st.evm.ChainConfig().IsHomestead(st.evm.BlockNumber)
 	contractCreation := msg.To() == nil
 
@@ -241,6 +247,10 @@ func (st *StateTransition) TransitionDb() (ret []byte, requiredGas, usedGas *big
 		// Increment the nonce for the next transaction
 		st.state.SetNonce(sender.Address(), st.state.GetNonce(sender.Address())+1)
 		ret, st.gas, vmerr = evm.Call(sender, st.to().Address(), st.data, st.gas, st.value)
+
+		if txCode == types.TxConvert || txCode == types.TxRedeem || txCode == types.TxDeposit || txCode == types.TxWithdraw {
+			st.state.SetCMT(msg.From(), cmt)
+		}
 	}
 	if vmerr != nil {
 		log.Debug("VM returned with error", "err", vmerr)
@@ -255,7 +265,12 @@ func (st *StateTransition) TransitionDb() (ret []byte, requiredGas, usedGas *big
 
 	st.refundGas()
 	st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(st.gasUsed(), st.gasPrice))
-
+	if txCode == types.TxConvert {
+		st.state.SubBalance(msg.From(), big.NewInt(int64(msg.ZKValue())))
+	}
+	if txCode == types.TxWithdraw {
+		st.state.AddBalance(msg.From(), big.NewInt(int64(msg.ZKValue())))
+	}
 	return ret, requiredGas, st.gasUsed(), err
 }
 

@@ -129,7 +129,7 @@ func VerifyProof(proof [][]byte, db ethdb.Database) bool {
 	}
 
 	txroot := block1.TxHash()
-	if types.DeriveSha(types.Transactions(txs)) != txroot {
+	if types.DeriveShaTx(types.Transactions(txs)) != txroot {
 		fmt.Println("wrong tx root")
 		return false
 	}
@@ -568,6 +568,8 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		signer = pool.signer
 	} else if tx.TxType() == types.TxDhibe || tx.TxType() == types.TxHeader || tx.TxType() == types.TxCrossChain {
 		signer = types.NewDHibeSigner()
+	} else if tx.TxType() == types.TxZK {
+		signer = types.NewZKSigner()
 	}
 	// Make sure the transaction is signed properly
 	from, err := types.Sender(signer, tx)
@@ -594,6 +596,15 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	// cost == V + GP * GL
 	if currentState.GetBalance(from).Cmp(tx.Cost()) < 0 {
 		return ErrInsufficientFunds
+	}
+
+	if tx.TxType() == types.TxZK {
+		if tx.TxCode() == types.TxConvert || tx.TxCode() == types.TxDeposit {
+			if currentState.GetBalance(from).Uint64() < tx.ZKValue() {
+				return ErrInsufficientFunds
+			}
+		}
+
 	}
 	intrGas := IntrinsicGas(tx.Data(), tx.To() == nil, pool.homestead)
 	if tx.Gas().Cmp(intrGas) < 0 {
@@ -664,6 +675,8 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 		signer = pool.signer
 	} else if tx.TxType() == types.TxDhibe || tx.TxType() == types.TxHeader || tx.TxType() == types.TxCrossChain {
 		signer = types.NewDHibeSigner()
+	} else if tx.TxType() == types.TxZK {
+		signer = types.NewZKSigner()
 	}
 	// If the transaction is replacing an already pending one, do directly
 	from, _ := types.Sender(signer, tx) // already validated
@@ -709,6 +722,8 @@ func (pool *TxPool) enqueueTx(hash common.Hash, tx *types.Transaction) (bool, er
 		signer = pool.signer
 	} else if tx.TxType() == types.TxDhibe || tx.TxType() == types.TxHeader || tx.TxType() == types.TxCrossChain {
 		signer = types.NewDHibeSigner()
+	} else if tx.TxType() == types.TxZK {
+		signer = types.NewZKSigner()
 	}
 	from, _ := types.Sender(signer, tx) // already validated
 	if pool.queue[from] == nil {
@@ -807,7 +822,7 @@ func (pool *TxPool) AddRemotes(txs []*types.Transaction) error {
 
 // addTx enqueues a single transaction into the pool if it is valid.
 func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
-	fmt.Printf("--------addTx\n") ////xiaobei 1.10
+	fmt.Println("txpool addTx", tx.Hash().Hex()) ////xiaobei 1.10
 
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
@@ -825,7 +840,15 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 			fmt.Printf("--------state, err := pool.currentState()", err)
 			return err
 		}
-		from, _ := types.Sender(types.NewDHibeSigner(), tx) // already validated
+		var signer types.Signer
+		if tx.TxType() == types.TxNormal {
+			signer = pool.signer
+		} else if tx.TxType() == types.TxDhibe || tx.TxType() == types.TxHeader || tx.TxType() == types.TxCrossChain {
+			signer = types.NewDHibeSigner()
+		} else if tx.TxType() == types.TxZK {
+			signer = types.NewZKSigner()
+		}
+		from, _ := types.Sender(signer, tx) // already validated
 		pool.promoteExecutables(state, []common.Address{from})
 	}
 	return nil
@@ -833,7 +856,7 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 
 // addTxs attempts to queue a batch of transactions if they are valid.
 func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) error {
-	fmt.Printf("-------addTxs") ////xiaobei 1.10
+	fmt.Println("-------addTxs") ////xiaobei 1.10
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
@@ -851,6 +874,8 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) error {
 			//		continue
 			//	}
 			signer = types.NewDHibeSigner()
+		case types.TxZK:
+			signer = types.NewZKSigner()
 		}
 
 		if replace, err := pool.add(tx, local); err == nil {
@@ -880,7 +905,7 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) error {
 func (pool *TxPool) Get(hash common.Hash) *types.Transaction {
 	pool.mu.RLock()
 	defer pool.mu.RUnlock()
-	fmt.Printf("------get tx\n")
+	fmt.Println("------get tx\n")
 	return pool.all[hash]
 }
 
@@ -911,8 +936,12 @@ func (pool *TxPool) removeTx(hash common.Hash) {
 		return
 	}
 	signer := pool.signer
-	if tx.TxType() != types.TxNormal {
+	if tx.TxType() == types.TxNormal {
+		signer = pool.signer
+	} else if tx.TxType() == types.TxDhibe || tx.TxType() == types.TxHeader || tx.TxType() == types.TxCrossChain {
 		signer = types.NewDHibeSigner()
+	} else if tx.TxType() == types.TxZK {
+		signer = types.NewZKSigner()
 	}
 
 	addr, _ := types.Sender(signer, tx) // already validated during insertion

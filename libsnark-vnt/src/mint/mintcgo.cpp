@@ -23,14 +23,16 @@ using namespace std;
 #include "circuit/gadget.tcc"
 
 char* hash(char* data,uint64_t size){
+    cout<<"hash (data):   "<<data<<endl;
     CSHA256 hasher;
     hasher.Write((unsigned char*)(data),size);
     uint256 result;
     hasher.Finalize(result.begin());
     std::string r = result.ToString();
-    char *p = new char[size+1];
-    r.copy(p, size, 0);
-    *(p + size) = '\0';
+    char *p = new char[65];
+    r.copy(p, 64, 0);
+    *(p + 64) = '\0';
+  //  cout<<p<<endl;
     return p;
 }
 

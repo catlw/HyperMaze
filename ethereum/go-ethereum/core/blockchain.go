@@ -28,7 +28,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/hashicorp/golang-lru"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -43,6 +42,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/hashicorp/golang-lru"
 
 	"github.com/ethereum/go-ethereum/consensus/util/events" ////xiaobei 1.2
 	"github.com/ethereum/go-ethereum/eth/fetcher"
@@ -992,6 +992,9 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 		coalescedLogs = append(coalescedLogs, logs...)
 
 		if err = WriteBlockReceipts(bc.chainDb, block.Hash(), block.NumberU64(), receipts); err != nil {
+			return i, err
+		}
+		if err = WriteZKfund(bc.chainDb, block.Header().ZKFunds, block.NumberU64()); err != nil {
 			return i, err
 		}
 

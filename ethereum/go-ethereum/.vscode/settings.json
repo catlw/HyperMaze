@@ -1,2 +1,5 @@
 {
+    "git.ignoreLimitWarning": true,
+    "go.gopath": "/home/liubuntu/gopath",
+    "go.inferGopath": false
 }

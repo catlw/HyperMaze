@@ -17,6 +17,8 @@
 package core
 
 import (
+	"errors"
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -27,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/zktx"
 )
 
 // StateProcessor is a basic Processor, which takes care of transitioning
@@ -62,6 +65,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		header       = block.Header()
 		allLogs      []*types.Log
 		gp           = new(GasPool).AddGas(block.GasLimit())
+		funds        []common.Hash
 	)
 	// Mutate the the block and state according to any hard-fork specs
 	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
@@ -76,9 +80,22 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		}
 		receipts = append(receipts, receipt)
 		allLogs = append(allLogs, receipt.Logs...)
+		if tx.TxCode() == types.TxDeposit {
+			funds = append(funds, tx.ZKCMTfd())
+		}
+
+	}
+	fundsinblock := block.Header().ZKFunds
+	if len(funds) != len(fundsinblock) {
+		fmt.Println("inconsistent zkfunds count in a block")
+	}
+	for i := 0; i < len(funds); i++ {
+		if funds[i].String() != fundsinblock[i].String() {
+			fmt.Println("inconsistent zkfunds content in a block")
+		}
 	}
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
-	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles(), receipts)
+	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles(), receipts, funds)
 
 	return receipts, allLogs, totalUsedGas, nil
 }
@@ -94,11 +111,74 @@ func ApplyTransaction(config *params.ChainConfig, bc *BlockChain, author *common
 		signer = types.MakeSigner(config, header.Number)
 	case types.TxDhibe, types.TxHeader, types.TxCrossChain:
 		signer = types.NewDHibeSigner()
+	case types.TxZK:
+		signer = types.NewZKSigner()
 	}
 	msg, err := tx.AsMessage(signer)
 	if err != nil {
 		return nil, nil, err
 	}
+	if tx.TxType() == types.TxZK {
+		if tx.TxCode() == types.TxConvert {
+			if exist := statedb.Exist(common.BytesToAddress(tx.ZKSN().Bytes())); exist == true && ((tx.ZKSN()) != common.Hash{}) { //if sn is already exist,
+				return nil, big.NewInt(0), errors.New("sn is already used ")
+			}
+			cmtbalance := statedb.GetCMTBalance(msg.From())
+			if err = zktx.VerifyConvertProof(cmtbalance, tx.ZKSN(), tx.ZKCMTbal(), tx.ZKValue(), tx.ZKProof()); err != nil {
+				fmt.Println("invalid zk mint proof: ", err)
+				return nil, big.NewInt(0), err
+			}
+			statedb.CreateAccount(common.BytesToAddress(tx.ZKSN().Bytes()))
+			statedb.SetNonce(common.BytesToAddress(tx.ZKSN().Bytes()), 1)
+		}
+		//else if tx.TxCode() == types.TxRedeem {
+		// 	cmtbalance := statedb.GetCMTBalance(msg.From())
+		// 	if exist := statedb.Exist(common.BytesToAddress(tx.ZKSN().Bytes())); exist == true && ((tx.ZKSN()) != common.Hash{}) { //if sn is already exist,
+		// 		return nil, big.NewInt(0), errors.New("sn is already used ")
+		// 	}
+		// 	if err = zktx.VerifySendProof(tx.ZKSN(), tx.ZKCMTS(), tx.ZKProof(), &cmtbalance, tx.ZKCMT()); err != nil {
+		// 		fmt.Println("invalid zk send proof: ", err)
+		// 		return nil, big.NewInt(0), err
+		// 	}
+		// 	statedb.CreateAccount(common.BytesToAddress(tx.ZKSN().Bytes()))
+		// 	statedb.SetNonce(common.BytesToAddress(tx.ZKSN().Bytes()), 1)
+		// 	// } else if tx.TxCode() == types.UpdateTx {
+		// 	// 	cmtbalance := statedb.GetCMTBalance(msg.From())
+		// 	// 	if err = zktx.VerifyUpdateProof(&cmtbalance, tx.RTcmt(), tx.ZKCMT(), tx.ZKProof()); err != nil {
+		// 	// 		fmt.Println("invalid zk update proof: ", err)
+		// 	// 		return nil, 0, err
+		// 	// 	}
+		// } else if tx.TxCode() == types.TxDeposit {
+		// 	if exist := statedb.Exist(common.BytesToAddress(tx.ZKSN().Bytes())); exist == true && (*(tx.ZKSN()) != common.Hash{}) { //if sn is already exist,
+		// 		return nil, 0, errors.New("sn in deposit tx has been already used")
+		// 	}
+		// 	cmtbalance := statedb.GetCMTBalance(msg.From())
+		// 	addr1, err := types.ExtractPKBAddress(types.HomesteadSigner{}, tx) //tbd
+		// 	ppp := ecdsa.PublicKey{crypto.S256(), tx.X(), tx.Y()}
+		// 	addr2 := crypto.PubkeyToAddress(ppp)
+		// 	if err != nil || addr1 != addr2 {
+		// 		return nil, 0, errors.New("invalid depositTx signature ")
+		// 	}
+		// 	if err = zktx.VerifyDepositProof(&ppp, tx.RTcmt(), &cmtbalance, tx.ZKSN(), tx.ZKCMT(), tx.ZKProof()); err != nil {
+		// 		fmt.Println("invalid zk deposit proof: ", err)
+		// 		return nil, 0, err
+		// 	}
+		// 	statedb.CreateAccount(common.BytesToAddress(tx.ZKSN().Bytes()))
+		// 	statedb.SetNonce(common.BytesToAddress(tx.ZKSN().Bytes()), 1)
+		// } else if tx.TxCode() == types.TxWithdraw {
+		// 	if exist := statedb.Exist(common.BytesToAddress(tx.ZKSN().Bytes())); exist == true && (*(tx.ZKSN()) != common.Hash{}) { //if sn is already exist,
+		// 		return nil, 0, errors.New("sn is already used ")
+		// 	}
+		// 	cmtbalance := statedb.GetCMTBalance(msg.From())
+		// 	if err = zktx.VerifyRedeemProof(&cmtbalance, tx.ZKSN(), tx.ZKCMT(), tx.ZKValue(), tx.ZKProof()); err != nil {
+		// 		fmt.Println("invalid zk redeem proof: ", err)
+		// 		return nil, 0, err
+		// 	}
+		// 	statedb.CreateAccount(common.BytesToAddress(tx.ZKSN().Bytes()))
+		// 	statedb.SetNonce(common.BytesToAddress(tx.ZKSN().Bytes()), 1)
+		// }
+	}
+
 	// Create a new context to be used in the EVM environment
 	context := NewEVMContext(msg, header, bc, author)
 	// Create a new environment which holds all relevant information

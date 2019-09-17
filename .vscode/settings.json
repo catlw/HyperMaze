@@ -1,0 +1,13 @@
+{
+    "terminal.integrated.rendererType": "dom",
+    "diffEditor.ignoreTrimWhitespace": true,
+    "window.zoomLevel": 1,
+    "C_Cpp.updateChannel": "Insiders",
+    "explorer.confirmDragAndDrop": false,
+    "explorer.confirmDelete": false,
+    "go.gopath": "/home/liubuntu/gopath",
+    "files.associations": {
+        "*.tcc": "cpp"
+    },
+    
+}

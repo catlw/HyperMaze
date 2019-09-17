@@ -109,6 +109,33 @@ type Signer interface {
 	// Checks for equality on the signers
 	Equal(Signer) bool
 }
+type ZKSinger struct {
+}
+
+func NewZKSigner() ZKSinger {
+	return ZKSinger{}
+}
+func (s ZKSinger) Equal(s2 Signer) bool {
+
+	return true
+}
+func (s ZKSinger) PublicKey(tx *Transaction) ([]byte, error) {
+	switch tx.TxCode() {
+	case TxConvert, TxRedeem, TxDeposit, TxWithdraw:
+		return tx.Sender().Bytes(), nil
+		//case TxDeposit, TxWithdraw:
+		//return common.StringToAddress("ffffffffffffffffffffffffffffffffffffffff").Bytes(), nil
+	}
+	return common.StringToAddress("ffffffffffffffffffffffffffffffffffffffff").Bytes(), nil
+}
+
+func (s ZKSinger) WithSignature(tx *Transaction, sig []byte) (*Transaction, error) {
+	return tx, nil
+}
+
+func (s ZKSinger) Hash(tx *Transaction) common.Hash {
+	return tx.Hash()
+}
 
 //DHibeSigner
 type DHibeSigner struct {

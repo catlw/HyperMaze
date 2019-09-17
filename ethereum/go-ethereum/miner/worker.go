@@ -76,10 +76,10 @@ type Work struct {
 
 	Block *types.Block // the new block
 
-	header   *types.Header
-	txs      []*types.Transaction
-	receipts []*types.Receipt
-
+	header    *types.Header
+	txs       []*types.Transaction
+	receipts  []*types.Receipt
+	zkfunds   []common.Hash
 	createdAt time.Time
 }
 
@@ -301,6 +301,8 @@ func (self *worker) update() {
 					signer = self.current.signer
 				} else if ev.Tx.TxType() == types.TxDhibe || ev.Tx.TxType() == types.TxHeader || ev.Tx.TxType() == types.TxCrossChain {
 					signer = types.NewDHibeSigner()
+				} else if ev.Tx.TxType() == types.TxZK {
+					signer = types.NewZKSigner()
 				}
 				acc, _ := types.Sender(signer, ev.Tx)
 				txs := map[common.Address]types.Transactions{acc: {ev.Tx}}
@@ -494,7 +496,7 @@ func (self *worker) commitNewWork() {
 
 	tstart := time.Now()
 	parent := self.chain.CurrentBlock()
-
+	fmt.Println("parent", parent.Header())
 	tstamp := tstart.Unix()
 	if parent.Time().Cmp(new(big.Int).SetInt64(tstamp)) >= 0 {
 		tstamp = parent.Time().Int64() + 1
@@ -515,6 +517,7 @@ func (self *worker) commitNewWork() {
 		Extra:      self.extra,
 		Time:       big.NewInt(tstamp),
 	}
+	fmt.Println("header hash", parent.Hash().Hex())
 	if node.ResultFile != nil {
 		wt := bufio.NewWriter(node.ResultFile)
 		str := fmt.Sprintf(" block %d  prepare time is :%v:\n", header.Number, time.Now())
@@ -598,7 +601,7 @@ func (self *worker) commitNewWork() {
 		delete(self.possibleUncles, hash)
 	}
 	// Create the new block to seal with the consensus engine
-	if work.Block, err = self.engine.Finalize(self.chain, header, work.state, work.txs, uncles, work.receipts); err != nil {
+	if work.Block, err = self.engine.Finalize(self.chain, header, work.state, work.txs, uncles, work.receipts, work.zkfunds); err != nil {
 		log.Error("Failed to finalize block for sealing", "err", err)
 		return
 	}
@@ -629,7 +632,6 @@ func (env *Work) commitTransactions(mux *event.TypeMux, txs *types.TransactionsB
 	gp := new(core.GasPool).AddGas(env.header.GasLimit)
 
 	var coalescedLogs []*types.Log
-
 	for {
 		// Retrieve the next transaction and abort if all done
 		tx := txs.Peek()
@@ -646,6 +648,9 @@ func (env *Work) commitTransactions(mux *event.TypeMux, txs *types.TransactionsB
 			signer = env.signer
 		case types.TxDhibe, types.TxHeader, types.TxCrossChain:
 			signer = types.NewDHibeSigner()
+		case types.TxZK:
+			signer = types.NewZKSigner()
+
 		}
 		from, _ := types.Sender(signer, tx)
 		// Check whether the tx is replay protected. If we're not in the EIP155 hf
@@ -667,7 +672,6 @@ func (env *Work) commitTransactions(mux *event.TypeMux, txs *types.TransactionsB
 
 		case nil:
 			// Everything ok, collect the logs and shift in the next transaction from the same account
-
 			coalescedLogs = append(coalescedLogs, logs...)
 			env.tcount++
 			txs.Shift()
@@ -711,6 +715,8 @@ func (env *Work) commitTransaction(tx *types.Transaction, bc *core.BlockChain, c
 	}
 	env.txs = append(env.txs, tx)
 	env.receipts = append(env.receipts, receipt)
-
+	if tx.TxCode() == types.TxDeposit {
+		env.zkfunds = append(env.zkfunds, tx.ZKCMTfd())
+	}
 	return nil, receipt.Logs
 }

@@ -33,8 +33,9 @@ import (
 )
 
 var (
-	EmptyRootHash  = DeriveSha(Transactions{})
-	EmptyUncleHash = CalcUncleHash(nil)
+	EmptyTxRootHash = DeriveShaTx(Transactions{})
+	EmptyRootHash   = DeriveSha(Transactions{})
+	EmptyUncleHash  = CalcUncleHash(nil)
 )
 
 // A BlockNonce is a 64-bit hash which proves (combined with the
@@ -72,6 +73,8 @@ type Header struct {
 	UncleHash   common.Hash    `json:"sha3Uncles"       gencodec:"required"`
 	Coinbase    common.Address `json:"miner"            gencodec:"required"`
 	Root        common.Hash    `json:"stateRoot"        gencodec:"required"`
+	RootCMTfd   common.Hash    `json:"cmtfdRoot"        gencodec:"required"`
+	ZKFunds     []common.Hash  `json:"zkfunds"          gencodec:"required"`
 	TxHash      common.Hash    `json:"transactionsRoot" gencodec:"required"`
 	ReceiptHash common.Hash    `json:"receiptsRoot"     gencodec:"required"`
 	Bloom       Bloom          `json:"logsBloom"        gencodec:"required"`
@@ -99,7 +102,8 @@ type headerMarshaling struct {
 // Hash returns the block hash of the header, which is simply the keccak256 hash of its
 // RLP encoding.
 func (h *Header) Hash() common.Hash {
-	return rlpHash(h)
+	//return rlpHash(h)
+	return ZKHashBlock(h)
 }
 
 func HashTxCommon(tx *Transaction) (h common.Hash) {
@@ -212,9 +216,9 @@ func NewBlock(header *Header, txs []*Transaction, uncles []*Header, receipts []*
 
 	// TODO: panic if len(txs) != len(receipts)
 	if len(txs) == 0 {
-		b.header.TxHash = EmptyRootHash
+		b.header.TxHash = EmptyTxRootHash
 	} else {
-		b.header.TxHash = DeriveSha(Transactions(txs))
+		b.header.TxHash = DeriveShaTx(Transactions(txs))
 		b.transactions = make(Transactions, len(txs))
 		copy(b.transactions, txs)
 	}
@@ -365,6 +369,10 @@ func CalcUncleHash(uncles []*Header) common.Hash {
 	return rlpHash(uncles)
 }
 
+// func Calczkfundsroot(funds []common.Hash) common.Hash {
+// 	return rlpHash(uncles)
+// }
+
 // WithSeal returns a new block with the data from b but the header replaced with
 // the sealed one.
 func (b *Block) WithSeal(header *Header) *Block {
@@ -433,7 +441,8 @@ func (h *Header) String() string {
 	Extra:		    %s
 	MixDigest:      %x
 	Nonce:		    %x
-]`, h.Hash(), h.ParentHash, h.UncleHash, h.Coinbase, h.Root, h.TxHash, h.ReceiptHash, h.Bloom, h.Difficulty, h.Number, h.GasLimit, h.GasUsed, h.Time, h.Extra, h.MixDigest, h.Nonce)
+	zkfdroot:	    %x
+]`, h.Hash(), h.ParentHash, h.UncleHash, h.Coinbase, h.Root, h.TxHash, h.ReceiptHash, h.Bloom, h.Difficulty, h.Number, h.GasLimit, h.GasUsed, h.Time, h.Extra, h.MixDigest, h.Nonce, h.RootCMTfd)
 }
 
 type Blocks []*Block

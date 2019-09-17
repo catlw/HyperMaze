@@ -49,6 +49,7 @@ import (
 	"github.com/ethereum/go-ethereum/pbc"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/synch" ////xiaobei 1.8
+	"github.com/ethereum/go-ethereum/zktx"
 )
 
 const (
@@ -397,7 +398,7 @@ func (pm *ProtocolManager) addHeaderWithSigLoop() {
 }
 func (pm *ProtocolManager) Stop() {
 	log.Info("Stopping Ethereum protocol")
-
+	zktx.SNfile.Close()
 	pm.txSub.Unsubscribe()         // quits txBroadcastLoop
 	pm.minedBlockSub.Unsubscribe() // quits blockBroadcastLoop
 	pm.headerTxSub.Unsubscribe()
@@ -1415,6 +1416,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 	case msg.Code == RequestPrivateKey:
 		log.Info("handleMsg ----RequestPrivateKey------")
+
 		var data RequestPrivateKeyData
 		if err := msg.Decode(&data); err != nil {
 			log.Error("Decode data error!!!")
@@ -1444,6 +1446,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			break
 		}
 		start := time.Now()
+		//	fmt.Println(pm.privateKey, pm.masterPublickey, pm.Randoms, pm.R, data.Address, int(data.Index), int(data.Level))
+
 		privateKey := hibe.ShadowGen(pm.privateKey, pm.masterPublickey, pm.Randoms, pm.R, data.Address, int(data.Index), int(data.Level))
 		end := time.Now()
 		if node.ResultFile != nil {
@@ -1466,35 +1470,35 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 		if node.LocalLevel == node.TotalLevel-1 {
 
-			ID2Key := make(map[string]*hibe.ShadowBytes)
-			var keys []hibe.KeyAndID
-			id := data.Address
-			baseid := id[0 : len(id)-2]
-			var i uint16
-			for i = 1; i < 5000; i++ {
-				var b1, b2 byte
-				b1 = byte(i >> 8)
-				b2 = byte(i)
-				if b1 == byte(0) {
-					b1 = byte(1)
-				}
-				if b2 == byte(0) {
-					b2 = byte(1)
-				}
-				bs := []byte{b1, b2}
-				tempid := baseid + string(bs[:])
-				pk := hibe.ShadowGen(pm.privateKey, pm.masterPublickey, pm.Randoms, pm.R, tempid, int(data.Index), int(data.Level))
-				ID2Key[tempid] = pk.ShadowToBytes()
-			}
-			for id, key := range ID2Key {
-				keys = append(keys, hibe.KeyAndID{key, id})
-			}
-			sd := BatchData{Index: node.NodeIndex, Keys: keys}
-			err := p2p.Send(p.rw, ReplyBatch, sd)
-			if err != nil {
-				log.Error("send batchkey to lower level nodes error")
-				fmt.Println(err)
-			}
+			// ID2Key := make(map[string]*hibe.ShadowBytes)
+			// var keys []hibe.KeyAndID
+			// id := data.Address
+			// baseid := id[0 : len(id)-2]
+			// var i uint16
+			// for i = 1; i < 5000; i++ {
+			// 	var b1, b2 byte
+			// 	b1 = byte(i >> 8)
+			// 	b2 = byte(i)
+			// 	if b1 == byte(0) {
+			// 		b1 = byte(1)
+			// 	}
+			// 	if b2 == byte(0) {
+			// 		b2 = byte(1)
+			// 	}
+			// 	bs := []byte{b1, b2}
+			// 	tempid := baseid + string(bs[:])
+			// 	pk := hibe.ShadowGen(pm.privateKey, pm.masterPublickey, pm.Randoms, pm.R, tempid, int(data.Index), int(data.Level))
+			// 	ID2Key[tempid] = pk.ShadowToBytes()
+			// }
+			// for id, key := range ID2Key {
+			// 	keys = append(keys, hibe.KeyAndID{key, id})
+			// }
+			// sd := BatchData{Index: node.NodeIndex, Keys: keys}
+			// err := p2p.Send(p.rw, ReplyBatch, sd)
+			// if err != nil {
+			// 	log.Error("send batchkey to lower level nodes error")
+			// 	fmt.Println(err)
+			// }
 
 		}
 
@@ -1780,6 +1784,16 @@ func (pm *ProtocolManager) BroadcastTx(hash common.Hash, tx *types.Transaction) 
 					}
 				}
 		*/
+
+	case types.TxZK:
+		//	if node.ID != node.ROOTID && tx.ID() == node.ID {
+		if node.ID != node.ROOTID {
+			for _, peer := range peers {
+				if peer.peerFlag == p2p.UpperLevelPeer {
+					peer.SendTransactions(types.Transactions{tx})
+				}
+			}
+		}
 	}
 
 }

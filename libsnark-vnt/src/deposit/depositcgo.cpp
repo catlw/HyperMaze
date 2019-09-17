@@ -295,7 +295,7 @@ char *genRoot(char *cmtarray, int n)
 
     for (int i = 0; i < n; i++)
     {
-        commitments[i] = uint256S(s.substr(i * 66, 66)); //分割cmtarray  0x+64个十六进制数 一共64位
+        commitments[i] = uint256S(s.substr(i * 66, 66)); //分割cmtarray  0x+64个十六进制数 一共64字节
         tree.append(commitments[i]);
     }
 

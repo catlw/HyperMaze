@@ -29,11 +29,11 @@ import (
 	"sync" ////shaoxiaobei
 	"time"
 
-	"github.com/op/go-logging"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/hibe"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
+	"github.com/op/go-logging"
 
 	///	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/util/events" ///copy util/events from fabric as an independent tool  --Zhiguo
@@ -1281,7 +1281,7 @@ func (instance *pbftCore) recvPrePrepare(preprep *types.PrePrepare) error {
 		// }
 	}
 	////
-	instance.softStartTimer(instance.requestTimeout, fmt.Sprintf("new pre-prepare for block %x", preprep.Block))
+	instance.softStartTimer(instance.requestTimeout, fmt.Sprintf("new pre-prepare for block %x", preprep.Block.Hash()))
 	instance.nullRequestTimer.Stop()
 
 	if instance.primary(instance.view) != instance.id && instance.prePrepared(string(preprep.BlockHash), preprep.View, preprep.SequenceNumber) && !cert.sentPrepare {

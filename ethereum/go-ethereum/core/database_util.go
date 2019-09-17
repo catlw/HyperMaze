@@ -39,12 +39,13 @@ var (
 	headBlockKey  = []byte("LastBlock")
 	headFastKey   = []byte("LastFast")
 
-	headerPrefix        = []byte("h")   // headerPrefix + num (uint64 big endian) + hash -> header
-	tdSuffix            = []byte("t")   // headerPrefix + num (uint64 big endian) + hash + tdSuffix -> td
-	numSuffix           = []byte("n")   // headerPrefix + num (uint64 big endian) + numSuffix -> hash
-	blockHashPrefix     = []byte("H")   // blockHashPrefix + hash -> num (uint64 big endian)
-	bodyPrefix          = []byte("b")   // bodyPrefix + num (uint64 big endian) + hash -> block body
-	blockReceiptsPrefix = []byte("r")   // blockReceiptsPrefix + num (uint64 big endian) + hash -> block receipts
+	headerPrefix        = []byte("h") // headerPrefix + num (uint64 big endian) + hash -> header
+	tdSuffix            = []byte("t") // headerPrefix + num (uint64 big endian) + hash + tdSuffix -> td
+	numSuffix           = []byte("n") // headerPrefix + num (uint64 big endian) + numSuffix -> hash
+	blockHashPrefix     = []byte("H") // blockHashPrefix + hash -> num (uint64 big endian)
+	bodyPrefix          = []byte("b") // bodyPrefix + num (uint64 big endian) + hash -> block body
+	blockReceiptsPrefix = []byte("r") // blockReceiptsPrefix + num (uint64 big endian) + hash -> block receipts
+	ZkfundsPrefix       = []byte("zkfunds")
 	preimagePrefix      = "secure-key-" // preimagePrefix + hash -> preimage
 
 	txMetaSuffix             = []byte{0x01}
@@ -82,9 +83,14 @@ func encodeBlockNumber(number uint64) []byte {
 	binary.BigEndian.PutUint64(enc, number)
 	return enc
 }
+func EncodeBlockNumber(number uint64) []byte {
+
+	return encodeBlockNumber(number)
+}
 
 // GetCanonicalHash retrieves a hash assigned to a canonical block number.
 func GetCanonicalHash(db ethdb.Database, number uint64) common.Hash {
+	fmt.Println("GetCanonicalHash:", append(append(headerPrefix, encodeBlockNumber(number)...), numSuffix...))
 	data, _ := db.Get(append(append(headerPrefix, encodeBlockNumber(number)...), numSuffix...))
 	if len(data) == 0 {
 		data, _ = db.Get(append(oldBlockNumPrefix, big.NewInt(int64(number)).Bytes()...))
@@ -305,6 +311,7 @@ func GetReceipt(db ethdb.Database, hash common.Hash) *types.Receipt {
 // WriteCanonicalHash stores the canonical hash for the given block number.
 func WriteCanonicalHash(db ethdb.Database, hash common.Hash, number uint64) error {
 	key := append(append(headerPrefix, encodeBlockNumber(number)...), numSuffix...)
+	fmt.Println("******", key, hash.Hex())
 	if err := db.Put(key, hash.Bytes()); err != nil {
 		log.Crit("Failed to store number to hash mapping", "err", err)
 	}
@@ -416,6 +423,40 @@ func WriteBlockReceipts(db ethdb.Database, hash common.Hash, number uint64, rece
 	key := append(append(blockReceiptsPrefix, encodeBlockNumber(number)...), hash.Bytes()...)
 	if err := db.Put(key, bytes); err != nil {
 		log.Crit("Failed to store block receipts", "err", err)
+	}
+	return nil
+}
+
+func WriteZKfund(db ethdb.Database, hash []common.Hash, number uint64) error {
+	// Convert the receipts into their storage form and serialize them
+
+	// Store the flattened receipt slice
+	key := append(ZkfundsPrefix, encodeBlockNumber(number)...)
+	var prehashes []common.Hash
+	var err error
+	var prehashesBytes []byte
+	if number != 0 {
+		prehashesBytes, err = db.Get(append(ZkfundsPrefix, encodeBlockNumber(number-1)...))
+		if err != nil {
+			fmt.Println("get zkfunds from db error")
+			return err
+		}
+		if len(prehashesBytes) != 0 {
+			reader := bytes.NewReader(prehashesBytes)
+			if err = rlp.Decode(reader, &prehashes); err != nil {
+				fmt.Println("decode zkfd errorrrrr", number)
+				return err
+			}
+		}
+	}
+
+	hashes := append(prehashes, hash...)
+	hashesBytes, err := rlp.EncodeToBytes(hashes)
+	if err != nil {
+		return nil
+	}
+	if err := db.Put(key, hashesBytes); err != nil {
+		log.Crit("Failed to store hashesBytes", "err", err)
 	}
 	return nil
 }

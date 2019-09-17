@@ -444,6 +444,11 @@ web3._extend({
 	methods:
 	[
 		new web3._extend.Method({
+			name: 'sendConvertTransaction',
+			call: 'eth_sendConvertTransaction',
+			params: 1,
+		}),
+		new web3._extend.Method({
 			name: 'stopSend',
 			call: 'eth_stopSend',
 			params: 1,

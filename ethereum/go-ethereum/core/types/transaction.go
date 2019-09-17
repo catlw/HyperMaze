@@ -52,13 +52,14 @@ var (
 	TxDhibe      uint32 = 1
 	TxHeader     uint32 = 2
 	TxCrossChain uint32 = 3
+	TxZK         uint32 = 4
 )
 
 var (
-	TxConvert  uint32 = 0
-	TxRedeem   uint32 = 1
-	TxDeposit  uint32 = 2
-	TxWithdraw uint32 = 3
+	TxConvert  uint32 = 1
+	TxRedeem   uint32 = 2
+	TxDeposit  uint32 = 3
+	TxWithdraw uint32 = 4
 )
 
 var RootAccount common.Address = common.HexToAddress("0xffffffffffffffffffffffffffffffffffffffff")
@@ -92,7 +93,7 @@ type txdata struct {
 	ZKEnc        []byte
 	ZKIntEnc     []byte
 	AccountNonce uint64          `json:"nonce"    gencodec:"required"`
-	TxType       uint32          //txnormal txheader txdhihe txcorsschain
+	TxType       uint32          //txnormal txheader txdhihe txcorsschain txzk
 	Price        *big.Int        `json:"gasPrice" gencodec:"required"`
 	GasLimit     *big.Int        `json:"gas"      gencodec:"required"`
 	Sender       *common.Address `json:"from"     rlp:"nil"`
@@ -202,14 +203,41 @@ func (tx *Transaction) CrossChainRecipient() common.Address {
 	return tx.data.CrossChainRecipient
 }
 
+func (tx *Transaction) SetPrice(price *big.Int) {
+	tx.data.Price = price
+}
+
 func (tx *Transaction) SetTxType(txType uint32) {
 	tx.data.TxType = txType
 }
 
+func (tx *Transaction) SetTxCode(code uint32) {
+	tx.data.TxCode = code
+}
+
+func (tx *Transaction) TxCode() uint32 {
+	return tx.data.TxCode
+}
 func (tx *Transaction) SetValue(value *big.Int) {
 	tx.data.Amount = value
 }
+func (tx *Transaction) SetZKValue(Value uint64) {
+	tx.data.ZKValue = Value
+}
+func (tx *Transaction) ZKValue() uint64 {
+	return tx.data.ZKValue
+}
 
+//
+func (tx *Transaction) ZKProof() []byte {
+	return tx.data.ZKProof
+}
+
+//
+func (tx *Transaction) SetZKProof(proof []byte) {
+	tx.data.ZKProof = make([]byte, len(proof))
+	copy(tx.data.ZKProof[:], proof[:])
+}
 func (tx *Transaction) TxType() uint32 {
 	return tx.data.TxType
 }
@@ -308,12 +336,38 @@ func newTransaction(nonce uint64, to *common.Address, amount, gasLimit, gasPrice
 	return &Transaction{data: d}
 }
 
+func (tx *Transaction) SetZKSN(sn common.Hash) {
+	tx.data.ZKSN = sn
+}
+
+//
+func (tx *Transaction) ZKSN() common.Hash {
+	return tx.data.ZKSN
+}
+
+func (tx *Transaction) ZKCMTbal() common.Hash {
+	return tx.data.ZKCMTbal
+}
+
+//
+func (tx *Transaction) ZKCMTfd() common.Hash {
+	return tx.data.ZKCMTfd
+}
+
+//
+func (tx *Transaction) SetZKCMTbal(hash common.Hash) {
+	tx.data.ZKCMTbal = hash
+}
+
+//
+func (tx *Transaction) SetZKCMTfd(hash common.Hash) {
+	tx.data.ZKCMTfd = hash
+}
+
 func (tx *Transaction) SetLevel(level uint32) {
 	tx.data.Level = level
 }
-func main() {
 
-}
 func (tx *Transaction) Headers() []*common.Hash {
 	return tx.data.Headers
 }
@@ -411,26 +465,59 @@ func (tx *Transaction) To() *common.Address {
 // Hash hashes the RLP encoding of tx.
 // It uniquely identifies the transaction.
 func (tx *Transaction) Hash() common.Hash {
-	if hash := tx.hash.Load(); hash != nil {
-		return hash.(common.Hash)
-	}
-	v := rlpHash(tx)
-	tx.hash.Store(v)
-	return v
+	// if hash := tx.hash.Load(); hash != nil {
+	// 	return hash.(common.Hash)
+	// }
+	// v := rlpHash(tx)
+	// tx.hash.Store(v)
+	// return v
+	return ZKHashTx(tx)
+
 }
 
-func (tx *Transaction) ZKHash() common.Hash {
+func ZKHashTx(tx *Transaction) common.Hash {
 	if hash := tx.hash.Load(); hash != nil {
+
 		return hash.(common.Hash)
 	}
-	SNString := C.CString(common.ToHex(tx.data.ZKSN.Bytes()))
-	defer C.free(unsafe.Pointer(SNString))
-	size := C.ulong(len(tx.data.ZKSN.Bytes()))
-	hashString := C.hash(SNString, size)
+	//fmt.Println(tx.data.ZKSN.Bytes())
+	TargetString := C.CString(common.ToHex(tx.data.ZKSN.Bytes()) + common.ToHex(tx.data.ZKCMTbal.Bytes()))
+	//SNString2 := C.CString(common.ToHex(tx.data.ZKSN.Bytes()))
+	defer C.free(unsafe.Pointer(TargetString))
+	//defer C.free(unsafe.Pointer(SNString2))
+	size := C.ulong(len(tx.data.ZKSN.Bytes()) + len(tx.data.ZKCMTbal.Bytes()))
+	hashString := C.hash(TargetString, size)
 	hashGo := C.GoString(hashString)
 	hashbytes, _ := hex.DecodeString(hashGo)
 	hash := common.BytesToHash(hashbytes)
 	tx.hash.Store(hash)
+	return hash
+}
+
+func ZKHashBlock(header *Header) common.Hash {
+	// if hash := tx.hash.Load(); hash != nil {
+
+	// 	return hash.(common.Hash)
+	// }
+	//fmt.Println(tx.data.ZKSN.Bytes())
+	targetbytes := append(header.TxHash.Bytes(), header.Root.Bytes()...)
+	targetbytes = append(targetbytes, header.RootCMTfd.Bytes()...)
+	TargetStringgo := common.ToHex(targetbytes)[2:]
+	TargetString := C.CString(TargetStringgo)
+
+	//fmt.Println("******************************", common.ToHex(header.TxHash.Bytes())+common.ToHex(header.Root.Bytes())+common.ToHex(header.RootCMTfd.Bytes()))
+	defer C.free(unsafe.Pointer(TargetString))
+	size := C.ulong(len(header.TxHash.Bytes()) + len(header.Root.Bytes()) + len(header.RootCMTfd.Bytes()))
+	hashString := C.hash(TargetString, size)
+	hashGo := C.GoString(hashString)
+	hashbytes, _ := hex.DecodeString(hashGo)
+	hash := common.BytesToHash(hashbytes)
+	//header.hash.Store(hash)
+	fmt.Println()
+	fmt.Println("header number", header.Number.Uint64())
+	fmt.Println("TargetString", common.ToHex(targetbytes)[2:])
+	fmt.Println("hash header", hash.Hex())
+	fmt.Println()
 	return hash
 }
 
@@ -464,6 +551,9 @@ func (tx *Transaction) AsMessage(s Signer) (Message, error) {
 		amount:     tx.data.Amount,
 		data:       tx.data.Payload,
 		checkNonce: true,
+		zkValue:    tx.ZKValue(),
+		cmt:        &tx.data.ZKCMTbal,
+		txCode:     tx.data.TxCode,
 	}
 
 	msg.from = *(tx.data.Sender)
@@ -504,6 +594,13 @@ func (tx *Transaction) String() string {
 	} else if tx.TxType() == TxDhibe || tx.TxType() == TxHeader || tx.TxType() == TxCrossChain {
 		signer := NewDHibeSigner()
 		//signer := deriveSigner(tx.data.V)             //TBD
+		if f, err := Sender(signer, tx); err != nil { // derive but don't cache
+			from = "[invalid sender: invalid sig]"
+		} else {
+			from = fmt.Sprintf("%x", f[:])
+		}
+	} else if tx.TxType() == TxZK {
+		signer := NewZKSigner()
 		if f, err := Sender(signer, tx); err != nil { // derive but don't cache
 			from = "[invalid sender: invalid sig]"
 		} else {
@@ -705,6 +802,9 @@ type Message struct {
 	amount, price, gasLimit *big.Int
 	data                    []byte
 	checkNonce              bool
+	txCode                  uint32
+	cmt                     *common.Hash
+	zkValue                 uint64
 }
 
 func NewMessage(from common.Address, to *common.Address, nonce uint64, amount, gasLimit, price *big.Int, data []byte, checkNonce bool) Message {
@@ -728,3 +828,6 @@ func (m Message) Gas() *big.Int        { return m.gasLimit }
 func (m Message) Nonce() uint64        { return m.nonce }
 func (m Message) Data() []byte         { return m.data }
 func (m Message) CheckNonce() bool     { return m.checkNonce }
+func (m Message) CMT() *common.Hash    { return m.cmt }
+func (m Message) ZKValue() uint64      { return m.zkValue }
+func (m Message) TxCode() uint32       { return m.txCode }

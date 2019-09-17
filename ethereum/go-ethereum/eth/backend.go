@@ -153,6 +153,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	vmConfig := vm.Config{EnablePreimageRecording: config.EnablePreimageRecording}
 	eth.blockchain, err = core.NewBlockChain(chainDb, eth.chainConfig, eth.engine, eth.eventMux, vmConfig)
 	if err != nil {
+		fmt.Println("zzz")
 		return nil, err
 	}
 

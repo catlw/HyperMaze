@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
 	///	"strconv"
 	"strings"
 	/////////////////////////////////////////////////
@@ -48,8 +49,8 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/hibe"
 	"github.com/ethereum/go-ethereum/node"
+
 	///"github.com/ethereum/go-ethereum/eth" // for ProtocolManager. ---Zhiguo Wan
-	lru "github.com/hashicorp/golang-lru"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/util/events"
@@ -59,6 +60,8 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
+	lru "github.com/hashicorp/golang-lru"
+
 	//"github.com/ethereum/go-ethereum/eth" //=> for Ethereum. need to solve import cycle not allowed --Agzs
 	"github.com/ethereum/go-ethereum/params"
 	///        "gopkg.in/urfave/cli.v1"
@@ -712,6 +715,7 @@ func (c *PBFT) Prepare(chain consensus.ChainReader, header *types.Header) error 
 
 	// Ensure the timestamp has the correct delay
 	parent := chain.GetHeader(header.ParentHash, number-1)
+	fmt.Println("============================", header.ParentHash.Hex(), number-1)
 	if parent == nil {
 		return consensus.ErrUnknownAncestor
 	}
@@ -724,10 +728,38 @@ func (c *PBFT) Prepare(chain consensus.ChainReader, header *types.Header) error 
 
 // Finalize implements consensus.Engine, ensuring no uncles are set, nor block
 // rewards given, and returns the final block.
-func (c *PBFT) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
+func (c *PBFT) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt, zkfunds []common.Hash) (*types.Block, error) {
 	// No block rewards in PoA, so the state remains as is and uncles are dropped
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	header.UncleHash = types.CalcUncleHash(nil)
+
+	//compute merkle root for zkfunds
+	number := header.Number.Uint64()
+	key := append(core.ZkfundsPrefix, core.EncodeBlockNumber(number-1)...)
+
+	var prehashes []common.Hash
+	var err error
+	var prehashesBytes []byte
+	db := c.db
+	if number != 0 {
+		prehashesBytes, err = db.Get(key)
+		if err != nil {
+			fmt.Println("get zkfunds from db error")
+			return nil, err
+		}
+		if len(prehashesBytes) != 0 {
+			reader := bytes.NewReader(prehashesBytes)
+			if err = rlp.Decode(reader, &prehashes); err != nil {
+				fmt.Println("decode zkfd errorrrrr", number)
+				return nil, err
+			}
+		}
+
+	}
+
+	hashes := append(prehashes, zkfunds...)
+	header.RootCMTfd = types.DeriveShaZkfunds(hashes)
+	fmt.Println("zk fund root for block ", number, header.RootCMTfd)
 	// fmt.Printf("--------(c *PBFT) Finalize\n") ////xiaobei 1.10
 	// fmt.Printf("------root is %x\n",header.Root) ////xiaobei 1.10
 	// Assemble and return the final block for sealing

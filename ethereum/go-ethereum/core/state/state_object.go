@@ -101,6 +101,7 @@ func (s *stateObject) empty() bool {
 type Account struct {
 	Nonce    uint64
 	Balance  *big.Int
+	CMT      common.Hash
 	Root     common.Hash // merkle root of the storage trie
 	CodeHash []byte
 }
@@ -281,7 +282,13 @@ func (self *stateObject) SetBalance(amount *big.Int) {
 	})
 	self.setBalance(amount)
 }
+func (self *stateObject) SetCMT(cmt *common.Hash) {
+	self.setCMT(*cmt)
+}
 
+func (self *stateObject) setCMT(cmt common.Hash) {
+	self.data.CMT = cmt
+}
 func (self *stateObject) setBalance(amount *big.Int) {
 	self.data.Balance = amount
 	if self.onDirty != nil {
@@ -374,6 +381,9 @@ func (self *stateObject) CodeHash() []byte {
 
 func (self *stateObject) Balance() *big.Int {
 	return self.data.Balance
+}
+func (self *stateObject) CMTBalance() common.Hash {
+	return self.data.CMT
 }
 
 func (self *stateObject) Nonce() uint64 {

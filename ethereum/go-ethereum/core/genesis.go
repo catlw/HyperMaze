@@ -28,12 +28,13 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/common/math"
-	"github.com/ethereum/go-ethereum/ethdb"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/zktx"
 )
 
 //go:generate gencodec -type Genesis -field-override genesisSpecMarshaling -out gen_genesis.go
@@ -230,6 +231,7 @@ func (g *Genesis) ToBlock() (*types.Block, *state.StateDB) {
 		for key, value := range account.Storage {
 			statedb.SetState(addr, key, value)
 		}
+		statedb.SetCMT(addr, zktx.GenCMT(0, common.Hash{}.Bytes(), common.Hash{}.Bytes()))
 	}
 	root := statedb.IntermediateRoot(false)
 	head := &types.Header{
@@ -244,6 +246,8 @@ func (g *Genesis) ToBlock() (*types.Block, *state.StateDB) {
 		MixDigest:  g.Mixhash,
 		Coinbase:   g.Coinbase,
 		Root:       root,
+		ZKFunds:    make([]common.Hash, 0),
+		RootCMTfd:  types.EmptyRootHash,
 	}
 	if g.GasLimit == 0 {
 		head.GasLimit = params.GenesisGasLimit
@@ -282,10 +286,23 @@ func (g *Genesis) Commit(db ethdb.Database) (*types.Block, error) {
 	if err := WriteHeadHeaderHash(db, block.Hash()); err != nil {
 		return nil, err
 	}
+
+	key := append(ZkfundsPrefix, encodeBlockNumber(0)...)
+	var hash []common.Hash
+	hashesBytes, err := rlp.EncodeToBytes(hash)
+	if err != nil {
+		return nil, nil
+	}
+	if err := db.Put(key, hashesBytes); err != nil {
+		log.Crit("Failed to store hashesBytes", "err", err)
+
+	}
+	fmt.Println("###########################")
 	config := g.Config
 	if config == nil {
 		config = params.AllProtocolChanges
 	}
+	//fmt.Println(block.Header())
 	return block, WriteChainConfig(db, block.Hash(), config)
 }
 

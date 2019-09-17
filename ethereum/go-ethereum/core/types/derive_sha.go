@@ -20,6 +20,7 @@ import (
 	"bytes"
 
 	"github.com/ethereum/go-ethereum/common"
+	merkle "github.com/ethereum/go-ethereum/merkleTree"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 )
@@ -38,4 +39,20 @@ func DeriveSha(list DerivableList) common.Hash {
 		trie.Update(keybuf.Bytes(), list.GetRlp(i))
 	}
 	return trie.Hash()
+}
+
+func DeriveShaTx(txs Transactions) common.Hash {
+	//fmt.Println(len(txs))
+	hashes := make([]common.Hash, 0)
+	for i := 0; i < len(txs); i++ {
+		hashes = append(hashes, txs[i].Hash())
+	}
+
+	return merkle.GenTxRoot(hashes)
+}
+
+func DeriveShaZkfunds(zkfunds []common.Hash) common.Hash {
+	//fmt.Println(len(zkfunds))
+
+	return merkle.GenZKfundsRoot(zkfunds)
 }
