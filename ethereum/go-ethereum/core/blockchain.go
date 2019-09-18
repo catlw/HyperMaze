@@ -49,7 +49,7 @@ import (
 )
 
 type CommittedEvent2 struct{} ////xiaobei 1.2
-
+var CMTFD = make([]common.Hash, 0)
 var ViewChangeFlag bool = false ////xiaobei 1.29
 
 var (
@@ -830,7 +830,7 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 func (bc *BlockChain) WriteBlock(block *types.Block) (status WriteStatus, err error) {
 	bc.wg.Add(1)
 	defer bc.wg.Done()
-
+	fmt.Println("write block: ", block.Number().Uint64())
 	// Calculate the total difficulty of the block
 	ptd := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
 	if ptd == nil {
@@ -876,6 +876,7 @@ func (bc *BlockChain) WriteBlock(block *types.Block) (status WriteStatus, err er
 // it will return the index number of the failing block as well an error describing what went wrong (for possible errors see core/errors.go).
 func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 	// Do a sanity check that the provided chain is actually ordered and linked
+	fmt.Println("insert chain start")
 	for i := 1; i < len(chain); i++ {
 		if chain[i].NumberU64() != chain[i-1].NumberU64()+1 || chain[i].ParentHash() != chain[i-1].Hash() {
 			// Chain broke ancestry, log a messge (programming error) and skip insertion
@@ -992,9 +993,6 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 		coalescedLogs = append(coalescedLogs, logs...)
 
 		if err = WriteBlockReceipts(bc.chainDb, block.Hash(), block.NumberU64(), receipts); err != nil {
-			return i, err
-		}
-		if err = WriteZKfund(bc.chainDb, block.Header().ZKFunds, block.NumberU64()); err != nil {
 			return i, err
 		}
 

@@ -403,6 +403,10 @@ func WriteBlock(db ethdb.Database, block *types.Block) error {
 	if err := WriteHeader(db, block.Header()); err != nil {
 		return err
 	}
+	fmt.Println("write zkfunds: ", block.Number().Uint64())
+	if err := WriteZKfund(db, block.Header().ZKFunds, block.NumberU64()); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -456,8 +460,11 @@ func WriteZKfund(db ethdb.Database, hash []common.Hash, number uint64) error {
 		return nil
 	}
 	if err := db.Put(key, hashesBytes); err != nil {
+		fmt.Println("write zkfunds error, block number:", number)
 		log.Crit("Failed to store hashesBytes", "err", err)
 	}
+	fmt.Println("write zkfunds successful, block number:", number, "length of zkfunds in this block: ", len(hash), "length of total zkfunds", len(hashes))
+
 	return nil
 }
 

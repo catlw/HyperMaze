@@ -24,6 +24,7 @@ package types
 import "C"
 import (
 	"container/heap"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -486,11 +487,26 @@ func ZKHashTx(tx *Transaction) common.Hash {
 	defer C.free(unsafe.Pointer(TargetString))
 	//defer C.free(unsafe.Pointer(SNString2))
 	size := C.ulong(len(tx.data.ZKSN.Bytes()) + len(tx.data.ZKCMTbal.Bytes()))
-	hashString := C.hash(TargetString, size)
+	hashString := C.hash(TargetString, 2*size)
 	hashGo := C.GoString(hashString)
 	hashbytes, _ := hex.DecodeString(hashGo)
 	hash := common.BytesToHash(hashbytes)
 	tx.hash.Store(hash)
+	return hash
+}
+
+func TestHash(str string) common.Hash {
+
+	//fmt.Println(tx.data.ZKSN.Bytes())
+	TargetString := C.CString(str)
+	//SNString2 := C.CString(common.ToHex(tx.data.ZKSN.Bytes()))
+	defer C.free(unsafe.Pointer(TargetString))
+	//defer C.free(unsafe.Pointer(SNString2))
+	size := C.ulong(len(str))
+	hashString := C.hash(TargetString, size)
+	hashGo := C.GoString(hashString)
+	hashbytes, _ := hex.DecodeString(hashGo)
+	hash := common.BytesToHash(hashbytes)
 	return hash
 }
 
@@ -502,21 +518,28 @@ func ZKHashBlock(header *Header) common.Hash {
 	//fmt.Println(tx.data.ZKSN.Bytes())
 	targetbytes := append(header.TxHash.Bytes(), header.Root.Bytes()...)
 	targetbytes = append(targetbytes, header.RootCMTfd.Bytes()...)
+
+	var buf = make([]byte, 8)
+	binary.LittleEndian.PutUint64(buf, header.Number.Uint64())
+	targetbytes = append(targetbytes, buf...)
+
 	TargetStringgo := common.ToHex(targetbytes)[2:]
 	TargetString := C.CString(TargetStringgo)
 
 	//fmt.Println("******************************", common.ToHex(header.TxHash.Bytes())+common.ToHex(header.Root.Bytes())+common.ToHex(header.RootCMTfd.Bytes()))
 	defer C.free(unsafe.Pointer(TargetString))
-	size := C.ulong(len(header.TxHash.Bytes()) + len(header.Root.Bytes()) + len(header.RootCMTfd.Bytes()))
-	hashString := C.hash(TargetString, size)
+	size := C.ulong(len(header.TxHash.Bytes()) + len(header.Root.Bytes()) + len(header.RootCMTfd.Bytes()) + len(buf))
+	hashString := C.hash(TargetString, 2*size) //the length of string is twice of bytes
 	hashGo := C.GoString(hashString)
 	hashbytes, _ := hex.DecodeString(hashGo)
 	hash := common.BytesToHash(hashbytes)
 	//header.hash.Store(hash)
 	fmt.Println()
 	fmt.Println("header number", header.Number.Uint64())
+	fmt.Println("header number little endian", common.Bytes2Hex(buf))
 	fmt.Println("TargetString", common.ToHex(targetbytes)[2:])
-	fmt.Println("hash header", hash.Hex())
+	fmt.Println("TargetString length", size)
+	fmt.Println("header hash", hash.Hex())
 	fmt.Println()
 	return hash
 }

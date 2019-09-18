@@ -449,6 +449,11 @@ web3._extend({
 			params: 1,
 		}),
 		new web3._extend.Method({
+			name: 'sendDepositTransaction',
+			call: 'eth_sendDepositTransaction',
+			params: 1,
+		}),
+		new web3._extend.Method({
 			name: 'stopSend',
 			call: 'eth_stopSend',
 			params: 1,

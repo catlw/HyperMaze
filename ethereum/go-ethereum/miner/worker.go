@@ -327,6 +327,7 @@ func (self *worker) wait() {
 			}
 			block := result.Block
 			work := result.Work
+			core.CMTFD = append(core.CMTFD, block.Header().ZKFunds...)
 			if node.ResultFile != nil {
 				wt := bufio.NewWriter(node.ResultFile)
 				str := fmt.Sprintf(" block %d consensus confirm time is :%v:\n", block.Number(), time.Now())
@@ -337,14 +338,16 @@ func (self *worker) wait() {
 				wt.Flush()
 			}
 			if self.fullValidation {
+				fmt.Println("full validation: block number:", block.Number().Uint64())
 				if _, err := self.chain.InsertChain(types.Blocks{block}); err != nil {
-					fmt.Println("full validation")
+
 					log.Error("Mined invalid block", "err", err)
 					continue
 				}
 
 				go self.mux.Post(core.NewMinedBlockEvent{Block: block})
 			} else {
+				fmt.Println("worker receive mined block: ", block.Number().Uint64())
 				work.state.CommitTo(self.chainDb, self.config.IsEIP158(block.Number()))
 				stat, err := self.chain.WriteBlock(block)
 				if err != nil {
@@ -496,7 +499,7 @@ func (self *worker) commitNewWork() {
 
 	tstart := time.Now()
 	parent := self.chain.CurrentBlock()
-	fmt.Println("parent", parent.Header())
+
 	tstamp := tstart.Unix()
 	if parent.Time().Cmp(new(big.Int).SetInt64(tstamp)) >= 0 {
 		tstamp = parent.Time().Int64() + 1
@@ -517,7 +520,8 @@ func (self *worker) commitNewWork() {
 		Extra:      self.extra,
 		Time:       big.NewInt(tstamp),
 	}
-	fmt.Println("header hash", parent.Hash().Hex())
+	fmt.Println("commit new work, block number: ", header.Number.Uint64())
+	fmt.Println("parent header hash", parent.Hash().Hex())
 	if node.ResultFile != nil {
 		wt := bufio.NewWriter(node.ResultFile)
 		str := fmt.Sprintf(" block %d  prepare time is :%v:\n", header.Number, time.Now())

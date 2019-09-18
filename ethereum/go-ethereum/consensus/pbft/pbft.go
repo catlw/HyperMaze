@@ -732,7 +732,8 @@ func (c *PBFT) Finalize(chain consensus.ChainReader, header *types.Header, state
 	// No block rewards in PoA, so the state remains as is and uncles are dropped
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	header.UncleHash = types.CalcUncleHash(nil)
-
+	header.ZKFunds = make([]common.Hash, len(zkfunds))
+	copy(header.ZKFunds, zkfunds[:])
 	//compute merkle root for zkfunds
 	number := header.Number.Uint64()
 	key := append(core.ZkfundsPrefix, core.EncodeBlockNumber(number-1)...)
@@ -744,7 +745,7 @@ func (c *PBFT) Finalize(chain consensus.ChainReader, header *types.Header, state
 	if number != 0 {
 		prehashesBytes, err = db.Get(key)
 		if err != nil {
-			fmt.Println("get zkfunds from db error")
+			fmt.Println("get zkfunds from db error, block number", number-1)
 			return nil, err
 		}
 		if len(prehashesBytes) != 0 {
