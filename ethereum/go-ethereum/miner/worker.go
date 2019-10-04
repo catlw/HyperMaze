@@ -129,6 +129,7 @@ type worker struct {
 	mining int32
 	atWork int32
 
+	addressIndex   uint32
 	fullValidation bool
 }
 
@@ -170,7 +171,8 @@ func (self *worker) addHeader(hash *common.Hash) *types.Transaction {
 	} else {
 		self.headers = append(self.headers, hash)
 		if len(self.headers) == HEADS {
-			hibeaddr := &ethapi.DHibeAddress{node.ID, 0}
+			hibeaddr := &ethapi.DHibeAddress{node.ID, self.addressIndex}
+			self.addressIndex += 1
 			address := hibeaddr.Address()
 			db := self.chainDb
 			var nonce uint64
@@ -182,9 +184,18 @@ func (self *worker) addHeader(hash *common.Hash) *types.Transaction {
 				if err = rlp.Decode(reader, &nonce); err != nil {
 					return nil
 				}
-				nonce += 1
+
 			}
+
 			tx = types.NewHeaderTransaction(nonce, self.headers, &address, node.LocalLevel)
+			nonce += 1
+			nonceBytes, err = rlp.EncodeToBytes(nonce)
+			if err != nil {
+				fmt.Println("EncodeToBytes(nonce) error")
+			}
+
+			db.Put(append(address.Bytes(), core.AddressNonceSuffix...), nonceBytes)
+
 			types.DHibeSignTx(tx)
 			//fmt.Println(tx)
 			//	sig := hibe.Sign(hibe.PrivateKey, hibe.MasterPubKey, types.HibeHash(tx).Bytes(), hibe.Random)
@@ -285,7 +296,7 @@ func (self *worker) update() {
 		switch ev := event.Data.(type) {
 		case core.ChainHeadEvent:
 			log.Info("-----------ChainHeadEvent is called!!!")
-			time.Sleep(1 * time.Second)
+			time.Sleep(10 * time.Millisecond)
 			self.commitNewWork()
 		case core.ChainSideEvent:
 			self.uncleMu.Lock()
@@ -500,11 +511,11 @@ func (self *worker) commitNewWork() {
 		tstamp = parent.Time().Int64() + 1
 	}
 	// this will ensure we're not going off too far in the future
-	if now := time.Now().Unix(); tstamp > now+1 {
-		wait := time.Duration(tstamp-now) * time.Second
-		log.Info("Mining too far in the future", "wait", common.PrettyDuration(wait))
-		time.Sleep(wait)
-	}
+	// if now := time.Now().Unix(); tstamp > now+1 {
+	// 	wait := time.Duration(tstamp-now) * time.Second
+	// 	log.Info("Mining too far in the future", "wait", common.PrettyDuration(wait))
+	// 	time.Sleep(wait)
+	// }
 
 	num := parent.Number()
 	header := &types.Header{

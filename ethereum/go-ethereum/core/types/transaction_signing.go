@@ -134,6 +134,7 @@ func (s DHibeSigner) PublicKey(tx *Transaction) ([]byte, error) {
 	ID := tx.ID()
 	//if hibe.Verify(s.publicKey, ID, HibeHash(tx), 10, tx.data.HibeSig.CompressedBytesToSig()) {
 	if hibe.Verify(s.publicKey, ID, HibeHash(tx).Bytes(), int(tx.data.Level), signature.CompressedBytesToSig()) {
+		fmt.Println("verify tx sig, hash: ", tx.Hash().Hex())
 		return tx.data.Sender.Bytes(), nil
 	}
 

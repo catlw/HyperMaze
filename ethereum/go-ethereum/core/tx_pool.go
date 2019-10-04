@@ -17,6 +17,7 @@
 package core
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -39,6 +40,7 @@ import (
 )
 
 var DB ethdb.Database
+var txflag = true
 
 func ValidateCrossChainTx(tx *types.Transaction, db ethdb.Database) error {
 	var err error
@@ -625,6 +627,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 // the pool due to pricing constraints.
 func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 	// If the transaction is already known, discard it
+
 	hash := tx.Hash()
 	if pool.all[hash] != nil {
 		log.Trace("Discarding already known transaction", "hash", hash)
@@ -665,6 +668,18 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 	} else if tx.TxType() == types.TxDhibe || tx.TxType() == types.TxHeader || tx.TxType() == types.TxCrossChain {
 		signer = types.NewDHibeSigner()
 	}
+	if tx.TxType() == types.TxHeader {
+		if node.ResultFile != nil {
+			wt := bufio.NewWriter(node.ResultFile)
+			str := fmt.Sprintf(" txpool receive txheader: hash in tx is %s\n tx is %s", tx.Headers()[0].Hex(), tx.String())
+			_, err := wt.WriteString(str)
+			if err != nil {
+				log.Error("write error")
+			}
+			wt.Flush()
+		}
+
+	}
 	// If the transaction is replacing an already pending one, do directly
 	from, _ := types.Sender(signer, tx) // already validated
 	if list := pool.pending[from]; list != nil && list.Overlaps(tx) {
@@ -676,6 +691,18 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 		}
 		// New transaction is better, replace old one
 		if old != nil {
+			if old.TxType() == types.TxHeader {
+				if node.ResultFile != nil {
+					wt := bufio.NewWriter(node.ResultFile)
+					str := fmt.Sprintf(" txpool delete header %s", old.Headers()[0].Hex())
+					_, err := wt.WriteString(str)
+					if err != nil {
+						log.Error("write error")
+					}
+					wt.Flush()
+				}
+			}
+
 			delete(pool.all, old.Hash())
 			pool.priced.Removed()
 			pendingReplaceCounter.Inc(1)
@@ -1017,6 +1044,15 @@ func (pool *TxPool) promoteExecutables(state *state.StateDB, accounts []common.A
 	for _, list := range pool.pending {
 		pending += uint64(list.Len())
 	}
+	// if node.ResultFile != nil {
+	// 	wt := bufio.NewWriter(node.ResultFile)
+	// 	str := fmt.Sprintf(" pending tx is :%d:\n", pending)
+	// 	_, err := wt.WriteString(str)
+	// 	if err != nil {
+	// 		log.Error("write error")
+	// 	}
+	// 	wt.Flush()
+	// }
 	if pending > pool.config.GlobalSlots {
 		pendingBeforeCap := pending
 		// Assemble a spam order to penalize large transactors first

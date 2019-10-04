@@ -29,8 +29,6 @@ import (
 	"github.com/ethereum/go-ethereum/hibe"
 	"github.com/ethereum/go-ethereum/node"
 
-	"github.com/syndtr/goleveldb/leveldb"
-	"github.com/syndtr/goleveldb/leveldb/util"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
@@ -47,6 +45,8 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
 const (
@@ -1084,7 +1084,8 @@ func (s *PublicTransactionPoolAPI) GetTxProofByProof(ctx context.Context, proof 
 
 	blockData, err := s.b.ChainDb().Get(append(headerTxhash.Bytes(), 0x02))
 	if err != nil {
-		return nil, err
+		s := fmt.Sprintf("no data for %s", headerTxhash.Hex())
+		return nil, errors.New(s)
 	}
 
 	var txBlock struct {
@@ -1485,7 +1486,7 @@ func (s *PublicTransactionPoolAPI) SendTransaction3(ctx context.Context, args Se
 			fromAddress := from.Address()
 			tx.SetFromAddress(fromAddress)
 			tx.SetLevel(node.LocalLevel)
-
+			tx.SetNounce(uint64(currentRound))
 			if PID(args.ToID) == PID(node.ID) {
 				tx.SetTxType(types.TxDhibe)
 			} else {
@@ -1505,11 +1506,17 @@ func (s *PublicTransactionPoolAPI) SendTransaction3(ctx context.Context, args Se
 				break
 			}
 		}
+		start := time.Now()
+		// end := time.Now()
+		// if node.ResultFile != nil {
+		// 	wt := bufio.NewWriter(node.ResultFile)
+		// 	str := fmt.Sprintf("time for node %d ShadowSign  is :%v:\n", node.NodeIndex, end.Sub(start))
 		for _, tx := range signedTx {
 			s.b.SendBatch([]*types.Transaction{tx})
 			time.Sleep(time.Duration(ms) * time.Millisecond)
 		}
-
+		end := time.Now()
+		fmt.Println("sending time ", end.Sub(start))
 	}
 	return uint32(len(signedTx)), nil
 

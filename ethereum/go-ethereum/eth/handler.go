@@ -354,6 +354,7 @@ func (pm *ProtocolManager) processRootChainBlock() {
 
 func (pm *ProtocolManager) addHeaderWithSigLoop() {
 	for hash := range pm.headerTxChan {
+		fmt.Println("recovering intact sig for headertx ", hash.Hex())
 		pm.headerTxLock.Lock()
 		txs := pm.headers[hash]
 		pm.headerTxLock.Unlock()
@@ -369,22 +370,24 @@ func (pm *ProtocolManager) addHeaderWithSigLoop() {
 		nonce := txs[0].Tx.Nonce()
 
 		newTx := types.NewHeaderTransaction(nonce, txs[0].Tx.Headers(), &sender, node.LocalLevel)
-
-		nonceBytes, err := rlp.EncodeToBytes(nonce)
-		if err != nil {
-			continue
-		}
-		db := pm.chaindb
-		db.Put(append(sender.Bytes(), core.AddressNonceSuffix...), nonceBytes)
+		recepient := txs[0].Tx.Recipient()
+		newTx.SetRecipient(recepient)
+		//nonceBytes, err := rlp.EncodeToBytes(nonce)
+		//if err != nil {
+		//	continue
+		//}
+		//db := pm.chaindb
+		//db.Put(append(sender.Bytes(), core.AddressNonceSuffix...), nonceBytes)
 		types.WithSignature(newTx, sig)
-		fmt.Println("new header tx")
-		fmt.Println(newTx)
+		fmt.Println("new intact header tx", hash.Hex())
+
 		if hibe.Verify(hibe.MasterPubKey, node.ID, types.HibeHash(newTx).Bytes(), int(node.LocalLevel), newTx.GetDhibeSig().CompressedBytesToSig()) {
+			fmt.Println("recover intact sig for headertx successfully", hash.Hex(), newTx.Headers()[0].Hex())
 			peers := pm.peers.PeersWithoutTx(hash)
 
 			for _, peer := range peers {
 				if peer.peerFlag == p2p.UpperLevelPeer {
-					fmt.Println("send headerTx to upper level")
+					fmt.Println("send headerTx to upper level", hash.Hex(), newTx.Headers()[0].Hex())
 					peer.SendTransactions(types.Transactions{newTx})
 				}
 			}
@@ -498,22 +501,27 @@ func (pm *ProtocolManager) handle(p *peer) error {
 		}()
 	}
 	log.Info("pm.handle(peer)-----------add peer done-------------") //=>test. --Agzs
-	//=> add peer done, then broadcast selfNode to this peer, there exists some errors in removePeer --Agzs 12.18
+
 	selfEnode := node.GetSelfEnode()
-	//node.AddPeerComm <- &node.URLFlag{Enode: &selfEnode, Flag: p2p.CurrentLevelPeer}
-	if p.peerFlag == p2p.LowLevelPeer {
-		//=>From this peer, currentLevePeer is it's parent, change Flag to UpperLevelPeer and broadcast msg. --Agzs
-		p.SendAddPeerMsg(&node.URLFlag{Enode: &selfEnode, Flag: p2p.UpperLevelPeer})
-	} else if p.peerFlag == p2p.CurrentLevelPeer {
-		//=>From this peer, currentLevePeer is it's brother, just broadcast msg. --Agzs
+	if p.peerFlag == p2p.CurrentLevelPeer {
 		p.SendAddPeerMsg(&node.URLFlag{Enode: &selfEnode, Flag: p2p.CurrentLevelPeer})
-	} else if p.peerFlag == p2p.UpperLevelPeer {
-		//=>From this peer, currentLevePeer is child, change Flag LowLevelPeer to and broadcast msg. --Agzs
-		p.SendAddPeerMsg(&node.URLFlag{Enode: &selfEnode, Flag: p2p.LowLevelPeer})
-	} else if p.peerFlag == p2p.CurrentLevelOrdinaryPeer {
-		//=>From this peer, CurrentLevelOrdinaryPeer is it's brother, just broadcast msg. --Agzs
-		p.SendAddPeerMsg(&node.URLFlag{Enode: &selfEnode, Flag: p2p.CurrentLevelOrdinaryPeer})
 	}
+	//=> add peer done, then broadcast selfNode to this peer, there exists some errors in removePeer --Agzs 12.18
+	// selfEnode := node.GetSelfEnode()
+	// //node.AddPeerComm <- &node.URLFlag{Enode: &selfEnode, Flag: p2p.CurrentLevelPeer}
+	// if p.peerFlag == p2p.LowLevelPeer {
+	// 	//=>From this peer, currentLevePeer is it's parent, change Flag to UpperLevelPeer and broadcast msg. --Agzs
+	// 	p.SendAddPeerMsg(&node.URLFlag{Enode: &selfEnode, Flag: p2p.UpperLevelPeer})
+	// } else if p.peerFlag == p2p.CurrentLevelPeer {
+	// 	//=>From this peer, currentLevePeer is it's brother, just broadcast msg. --Agzs
+	// 	p.SendAddPeerMsg(&node.URLFlag{Enode: &selfEnode, Flag: p2p.CurrentLevelPeer})
+	// } else if p.peerFlag == p2p.UpperLevelPeer {
+	// 	//=>From this peer, currentLevePeer is child, change Flag LowLevelPeer to and broadcast msg. --Agzs
+	// 	p.SendAddPeerMsg(&node.URLFlag{Enode: &selfEnode, Flag: p2p.LowLevelPeer})
+	// } else if p.peerFlag == p2p.CurrentLevelOrdinaryPeer {
+	// 	//=>From this peer, CurrentLevelOrdinaryPeer is it's brother, just broadcast msg. --Agzs
+	// 	p.SendAddPeerMsg(&node.URLFlag{Enode: &selfEnode, Flag: p2p.CurrentLevelOrdinaryPeer})
+	// }
 	//=> check addPeerUrlArray, ensure addPeerUrlArray and removPeerUrlArray don't have same enode. --Agzs 12.18
 	//node.PrintArray() //=>test.12
 	//================================== end ==============>
@@ -1443,18 +1451,18 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			log.Error("R does not exist ")
 			break
 		}
-		start := time.Now()
+		//start := time.Now()
 		privateKey := hibe.ShadowGen(pm.privateKey, pm.masterPublickey, pm.Randoms, pm.R, data.Address, int(data.Index), int(data.Level))
-		end := time.Now()
-		if node.ResultFile != nil {
-			wt := bufio.NewWriter(node.ResultFile)
-			str := fmt.Sprintf("time for node %d ShadowGen  is :%v:\n", node.NodeIndex, end.Sub(start))
-			_, err := wt.WriteString(str)
-			if err != nil {
-				log.Error("write error")
-			}
-			wt.Flush()
-		}
+		// end := time.Now()
+		// if node.ResultFile != nil {
+		// 	wt := bufio.NewWriter(node.ResultFile)
+		// 	str := fmt.Sprintf("time for node %d ShadowGen  is :%v:\n", node.NodeIndex, end.Sub(start))
+		// 	_, err := wt.WriteString(str)
+		// 	if err != nil {
+		// 		log.Error("write error")
+		// 	}
+		// 	wt.Flush()
+		// }
 		err := p2p.Send(p.rw, KeyMsg, ShadowData{Index: node.NodeIndex, MasterPubKey: pm.masterPublickey.MasterPubkeyToBytes(), Shadow: privateKey.ShadowToBytes()})
 
 		//fmt.Printf("send private key piece to %d\n", data.Index)
@@ -1471,7 +1479,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			id := data.Address
 			baseid := id[0 : len(id)-2]
 			var i uint16
-			for i = 1; i < 5000; i++ {
+			for i = 1; i < 500; i++ {
 				var b1, b2 byte
 				b1 = byte(i >> 8)
 				b2 = byte(i)
@@ -1685,22 +1693,22 @@ func (pm *ProtocolManager) maybeMakeupPrivateKey() {
 	pm.privateKey = hibe.KeyRecon(keys, indexs)
 	hibe.PrivateKey = pm.privateKey
 	node.KeyStatus <- true
-	if pm.privateKey != nil {
-		log.Info("key generate succeed ,the key is")
-		node.KeyGenerateTime = time.Now()
-		if node.LocalLevel != 0 {
-			wt := bufio.NewWriter(node.ResultFile)
-			str := fmt.Sprintf("time for node %d generating privatekey is:%v\n", node.NodeIndex, node.KeyGenerateTime.Sub(node.KeyRequestTime))
-			_, err := wt.WriteString(str)
-			if err != nil {
-				log.Error("write error")
-			}
-			wt.Flush()
-			//fmt.Println(node.NodeIndex, "genereate key at time:", node.KeyGenerateTime)
-			fmt.Println(node.NodeIndex, "total time for generating privatekey:", node.KeyGenerateTime.Sub(node.KeyRequestTime))
-		}
-		//fmt.Println(pm.privateKey)
-	}
+	// if pm.privateKey != nil {
+	// 	log.Info("key generate succeed ,the key is")
+	// 	node.KeyGenerateTime = time.Now()
+	// 	if node.LocalLevel != 0 {
+	// 		wt := bufio.NewWriter(node.ResultFile)
+	// 		str := fmt.Sprintf("time for node %d generating privatekey is:%v\n", node.NodeIndex, node.KeyGenerateTime.Sub(node.KeyRequestTime))
+	// 		_, err := wt.WriteString(str)
+	// 		if err != nil {
+	// 			log.Error("write error")
+	// 		}
+	// 		wt.Flush()
+	// 		//fmt.Println(node.NodeIndex, "genereate key at time:", node.KeyGenerateTime)
+	// 		fmt.Println(node.NodeIndex, "total time for generating privatekey:", node.KeyGenerateTime.Sub(node.KeyRequestTime))
+	// 	}
+	// 	//fmt.Println(pm.privateKey)
+	// }
 
 }
 
@@ -2084,16 +2092,16 @@ func (self *ProtocolManager) processSetID() {
 			if m == 0 || n == 0 {
 				continue
 			}
-			start := time.Now()
+			//start := time.Now()
 			masterPubkey, masterKeys, err := hibe.Setup(int(totalLevel), int(m), int(n))
-			end := time.Now()
-			diff := end.Sub(start)
-			if node.ResultFile != nil {
-				wt := bufio.NewWriter(node.ResultFile)
-				str := fmt.Sprintf("time for node %d seting up is:%v\n", node.NodeIndex, diff)
-				_, err = wt.WriteString(str)
-				wt.Flush()
-			}
+			// end := time.Now()
+			// diff := end.Sub(start)
+			// if node.ResultFile != nil {
+			// 	wt := bufio.NewWriter(node.ResultFile)
+			// 	str := fmt.Sprintf("time for node %d seting up is:%v\n", node.NodeIndex, diff)
+			// 	_, err = wt.WriteString(str)
+			// 	wt.Flush()
+			// }
 			//	masterPubkey, masterKeys, err := hibe.Setup(4, 4, 4)
 			if err != nil {
 				log.Error("setup error")
@@ -2214,33 +2222,39 @@ func (pm *ProtocolManager) BroadcastAddPeers(addPeerMsg *node.URLFlag) {
 		// receive UpperLevelPeer's enode, just broadcast msg to current level peer. --Agzs
 		// receive CurrentLevelOrdinaryPeer's enode, just broadcast msg to currentLevelPeer and CurrentLevelOrdinaryPeer. --Agzs
 
-		if addPeerMsg.Flag == p2p.UpperLevelPeer { //=>addPeerMsg means adding a upper level peer --Agzs
-			if peer.peerFlag == p2p.CurrentLevelPeer { //=> only broadcast addPeerMsg to current level peer --Agzs
-				peer.SendAddPeerMsg(addPeerMsg)
-			}
-		} else if addPeerMsg.Flag == p2p.CurrentLevelPeer { //=>addPeerMsg means adding a current level peer --Agzs
-			if peer.peerFlag == p2p.LowLevelPeer {
-				//=>From this peer, currentLevePeer is it's parent, change Flag to UpperLevelPeer and broadcast msg. --Agzs
-				peer.SendAddPeerMsg(&node.URLFlag{Enode: addPeerMsg.Enode, Flag: p2p.UpperLevelPeer})
-			} else if peer.peerFlag == p2p.CurrentLevelPeer {
-				//=>From this peer, currentLevePeer is it's brother, just broadcast msg. --Agzs
-				peer.SendAddPeerMsg(addPeerMsg)
-			} else if peer.peerFlag == p2p.UpperLevelPeer {
-				//=>From this peer, currentLevePeer is child, change Flag LowLevelPeer to and broadcast msg. --Agzs
-				peer.SendAddPeerMsg(&node.URLFlag{Enode: addPeerMsg.Enode, Flag: p2p.LowLevelPeer})
-			} else if peer.peerFlag == p2p.CurrentLevelOrdinaryPeer {
-				peer.SendAddPeerMsg(&node.URLFlag{Enode: addPeerMsg.Enode, Flag: p2p.CurrentLevelOrdinaryPeer})
-			}
-		} else if addPeerMsg.Flag == p2p.LowLevelPeer { //=>addPeerMsg means adding a low level peer --Agzs
-			if peer.peerFlag == p2p.CurrentLevelPeer { //=> only broadcast addPeerMsg to current level peer --Agzs
-				peer.SendAddPeerMsg(addPeerMsg)
-			}
-		} else if addPeerMsg.Flag == p2p.CurrentLevelOrdinaryPeer {
-			if peer.peerFlag == p2p.CurrentLevelPeer || peer.peerFlag == p2p.CurrentLevelOrdinaryPeer {
-				//=> only broadcast addPeerMsg to currentLevelPeer and CurrentLevelOrdinaryPeer --Agzs
+		if addPeerMsg.Flag == p2p.CurrentLevelPeer {
+			if peer.peerFlag == p2p.CurrentLevelPeer {
 				peer.SendAddPeerMsg(addPeerMsg)
 			}
 		}
+
+		// if addPeerMsg.Flag == p2p.UpperLevelPeer { //=>addPeerMsg means adding a upper level peer --Agzs
+		// 	if peer.peerFlag == p2p.CurrentLevelPeer { //=> only broadcast addPeerMsg to current level peer --Agzs
+		// 		peer.SendAddPeerMsg(addPeerMsg)
+		// 	}
+		// } else if addPeerMsg.Flag == p2p.CurrentLevelPeer { //=>addPeerMsg means adding a current level peer --Agzs
+		// 	if peer.peerFlag == p2p.LowLevelPeer {
+		// 		//=>From this peer, currentLevePeer is it's parent, change Flag to UpperLevelPeer and broadcast msg. --Agzs
+		// 		peer.SendAddPeerMsg(&node.URLFlag{Enode: addPeerMsg.Enode, Flag: p2p.UpperLevelPeer})
+		// 	} else if peer.peerFlag == p2p.CurrentLevelPeer {
+		// 		//=>From this peer, currentLevePeer is it's brother, just broadcast msg. --Agzs
+		// 		peer.SendAddPeerMsg(addPeerMsg)
+		// 	} else if peer.peerFlag == p2p.UpperLevelPeer {
+		// 		//=>From this peer, currentLevePeer is child, change Flag LowLevelPeer to and broadcast msg. --Agzs
+		// 		peer.SendAddPeerMsg(&node.URLFlag{Enode: addPeerMsg.Enode, Flag: p2p.LowLevelPeer})
+		// 	} else if peer.peerFlag == p2p.CurrentLevelOrdinaryPeer {
+		// 		peer.SendAddPeerMsg(&node.URLFlag{Enode: addPeerMsg.Enode, Flag: p2p.CurrentLevelOrdinaryPeer})
+		// 	}
+		// } else if addPeerMsg.Flag == p2p.LowLevelPeer { //=>addPeerMsg means adding a low level peer --Agzs
+		// 	if peer.peerFlag == p2p.CurrentLevelPeer { //=> only broadcast addPeerMsg to current level peer --Agzs
+		// 		peer.SendAddPeerMsg(addPeerMsg)
+		// 	}
+		// } else if addPeerMsg.Flag == p2p.CurrentLevelOrdinaryPeer {
+		// 	if peer.peerFlag == p2p.CurrentLevelPeer || peer.peerFlag == p2p.CurrentLevelOrdinaryPeer {
+		// 		//=> only broadcast addPeerMsg to currentLevelPeer and CurrentLevelOrdinaryPeer --Agzs
+		// 		peer.SendAddPeerMsg(addPeerMsg)
+		// 	}
+		// }
 	}
 
 	log.Trace("Broadcast addPeersMsg", "hash", hash, "recipients", len(pm.peers.peers)) //=> peers ->  pm.peers.peers --Agzs

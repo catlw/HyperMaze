@@ -1,0 +1,1 @@
+/usr/bin/c++  -fPIC  -std=c++11 -Wall -Wextra -Wfatal-errors -pthread -ggdb3 -O2 -march=native -mtune=native -O2 -g -DNDEBUG  -shared -Wl,-soname,libzk_send.so -o libzk_send.so CMakeFiles/zk_send.dir/send/sendcgo.cpp.o 

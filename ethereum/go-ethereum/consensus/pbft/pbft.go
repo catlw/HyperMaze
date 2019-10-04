@@ -26,10 +26,11 @@ package pbft
 import (
 
 	///	"github.com/ethereum/go-ethereum/event"
-	"bufio"
+
 	"fmt"
 	"os"
 	"path/filepath"
+
 	///	"strconv"
 	"strings"
 	/////////////////////////////////////////////////
@@ -48,8 +49,8 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/hibe"
 	"github.com/ethereum/go-ethereum/node"
+
 	///"github.com/ethereum/go-ethereum/eth" // for ProtocolManager. ---Zhiguo Wan
-	lru "github.com/hashicorp/golang-lru"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/util/events"
@@ -59,6 +60,8 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
+	lru "github.com/hashicorp/golang-lru"
+
 	//"github.com/ethereum/go-ethereum/eth" //=> for Ethereum. need to solve import cycle not allowed --Agzs
 	"github.com/ethereum/go-ethereum/params"
 	///        "gopkg.in/urfave/cli.v1"
@@ -423,18 +426,18 @@ func (c *PBFT) SealTest(str string) error {
 		signature := hibe.Sign(publicKey, privateKey, str)
 	*/
 
-	start := time.Now()
+	//start := time.Now()
 	signature := hibe.ShadowSign(hibe.PrivateKey, hibe.MasterPubKey, []byte(str), hibe.Random)
-	end := time.Now()
-	if node.ResultFile != nil {
-		wt := bufio.NewWriter(node.ResultFile)
-		str := fmt.Sprintf("time for node %d ShadowSign  is :%v:\n", node.NodeIndex, end.Sub(start))
-		_, err := wt.WriteString(str)
-		if err != nil {
-			log.Error("write error")
-		}
-		wt.Flush()
-	}
+	// end := time.Now()
+	// if node.ResultFile != nil {
+	// 	wt := bufio.NewWriter(node.ResultFile)
+	// 	str := fmt.Sprintf("time for node %d ShadowSign  is :%v:\n", node.NodeIndex, end.Sub(start))
+	// 	_, err := wt.WriteString(str)
+	// 	if err != nil {
+	// 		log.Error("write error")
+	// 	}
+	// 	wt.Flush()
+	// }
 	testMsg := &TestMsg{
 		Str:       str,
 		Signature: signature.SIGToBytes(),

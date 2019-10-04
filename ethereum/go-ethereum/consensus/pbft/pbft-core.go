@@ -21,7 +21,6 @@ limitations under the License.
 package pbft
 
 import (
-	"bufio"
 	"encoding/base64"
 	"fmt"
 	"math/rand" //=> Agzs
@@ -29,11 +28,11 @@ import (
 	"sync" ////shaoxiaobei
 	"time"
 
-	"github.com/op/go-logging"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/hibe"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
+	"github.com/op/go-logging"
 
 	///	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/util/events" ///copy util/events from fabric as an independent tool  --Zhiguo
@@ -903,18 +902,18 @@ func (instance *pbftCore) recvPrePrepareTestMsg(msg *TestMsg) error {
 	if timer != nil {
 		timer.Stop()
 	}
-	start := time.Now()
+	//start := time.Now()
 	signature := hibe.ShadowSign(hibe.PrivateKey, hibe.MasterPubKey, []byte(msg.Str), hibe.Random)
-	end := time.Now()
-	if node.ResultFile != nil {
-		wt := bufio.NewWriter(node.ResultFile)
-		str := fmt.Sprintf("time for node %d ShadowSign  is :%v:\n", node.NodeIndex, end.Sub(start))
-		_, err := wt.WriteString(str)
-		if err != nil {
-			log.Error("write error")
-		}
-		wt.Flush()
-	}
+	//end := time.Now()
+	// if node.ResultFile != nil {
+	// 	wt := bufio.NewWriter(node.ResultFile)
+	// 	str := fmt.Sprintf("time for node %d ShadowSign  is :%v:\n", node.NodeIndex, end.Sub(start))
+	// 	_, err := wt.WriteString(str)
+	// 	if err != nil {
+	// 		log.Error("write error")
+	// 	}
+	// 	wt.Flush()
+	// }
 
 	testMsg := &TestMsg{
 		Str:       msg.Str,
@@ -1042,25 +1041,25 @@ func (instance *pbftCore) maybeVerify() error {
 		indexes = append(indexes, int(msg.NodeIndex))
 		i++
 	}
-	start := time.Now()
+	//start := time.Now()
 	sig := hibe.SignRecon(signatures, indexes)
-	end := time.Now()
-	if node.ResultFile != nil {
-		wt := bufio.NewWriter(node.ResultFile)
-		str := fmt.Sprintf("time for node %d reconstructing signature is :%v:\n", node.NodeIndex, end.Sub(start))
-		_, err := wt.WriteString(str)
-		if err != nil {
-			log.Error("write error")
-		}
-		wt.Flush()
-	}
+	// end := time.Now()
+	// if node.ResultFile != nil {
+	// 	wt := bufio.NewWriter(node.ResultFile)
+	// 	str := fmt.Sprintf("time for node %d reconstructing signature is :%v:\n", node.NodeIndex, end.Sub(start))
+	// 	_, err := wt.WriteString(str)
+	// 	if err != nil {
+	// 		log.Error("write error")
+	// 	}
+	// 	wt.Flush()
+	// }
 
 	if hibe.Verify(hibe.MasterPubKey, node.ID, []byte(str), int(hibe.Level), sig) {
 		log.Info("verify hibe succeed!\n")
 		node.End = time.Now()
 		//	fmt.Println(node.NodeIndex, "finish time:", node.End)
 
-		diff := node.End.Sub(node.Start)
+		//	diff := node.End.Sub(node.Start)
 
 		if node.NodeIndex == 1 {
 			node.HibeFinished <- str
@@ -1068,17 +1067,17 @@ func (instance *pbftCore) maybeVerify() error {
 		}
 
 		hibefinished = true
-		fmt.Println("node", node.NodeIndex, "finish verify signature")
-		fmt.Println("Total time is", diff)
-		if node.ResultFile != nil {
-			wt := bufio.NewWriter(node.ResultFile)
-			str := fmt.Sprintf("time for node %d verifying signature is:%v\n", node.NodeIndex, diff)
-			_, err := wt.WriteString(str)
-			if err != nil {
-				log.Error("write error")
-			}
-			wt.Flush()
-		}
+		// fmt.Println("node", node.NodeIndex, "finish verify signature")
+		// fmt.Println("Total time is", diff)
+		// if node.ResultFile != nil {
+		// 	wt := bufio.NewWriter(node.ResultFile)
+		// 	str := fmt.Sprintf("time for node %d verifying signature is:%v\n", node.NodeIndex, diff)
+		// 	_, err := wt.WriteString(str)
+		// 	if err != nil {
+		// 		log.Error("write error")
+		// 	}
+		// 	wt.Flush()
+		// }
 	}
 
 	return nil
