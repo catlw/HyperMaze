@@ -637,7 +637,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 	// If the transaction fails basic validation, discard it
 	if err := pool.validateTx(tx, local); err != nil {
 		log.Trace("Discarding invalid transaction", "hash", hash, "err", err)
-		fmt.Println("\nDiscarding invalid transaction:%x", hash, err) ////xiaobei 2.5
+		fmt.Println("\nDiscarding invalid transaction:%x", hash.Hex(), err) ////xiaobei 2.5
 		invalidTxCounter.Inc(1)
 		return false, err
 	}
@@ -671,7 +671,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 	if tx.TxType() == types.TxHeader {
 		if node.ResultFile != nil {
 			wt := bufio.NewWriter(node.ResultFile)
-			str := fmt.Sprintf(" txpool receive txheader: hash in tx is %s\n tx is %s", tx.Headers()[0].Hex(), tx.String())
+			str := fmt.Sprintf(" txpool receive txheader: hash in tx is %s\n tx is %s", tx.Headers()[0].Hex(), tx.Hash().Hex())
 			_, err := wt.WriteString(str)
 			if err != nil {
 				log.Error("write error")

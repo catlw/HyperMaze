@@ -363,8 +363,10 @@ func (self *worker) wait() {
 				if node.ID != node.ROOTID {
 					//if true {
 					header := block.Hash()
+					fmt.Println("generating new header", header.Hex())
 					tx := self.addHeader(&header)
 					if tx != nil {
+						fmt.Println("generated new header", header.Hex())
 						go self.mux.Post(core.HeaderTxEvent{Tx: tx})
 					}
 				}

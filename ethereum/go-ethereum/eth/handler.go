@@ -344,7 +344,7 @@ func (pm *ProtocolManager) processRootChainBlock() {
 		peers := pm.peers.PeersWithoutTx(blockHash)
 		for _, peer := range peers {
 			if peer.peerFlag == p2p.LowLevelPeer {
-				fmt.Println("send RootChainBlockHash to lower level")
+				//fmt.Println("send RootChainBlockHash to lower level")
 				p2p.Send(peer.rw, RootChainBlockHash, blockHash)
 			}
 		}
@@ -379,7 +379,7 @@ func (pm *ProtocolManager) addHeaderWithSigLoop() {
 		//db := pm.chaindb
 		//db.Put(append(sender.Bytes(), core.AddressNonceSuffix...), nonceBytes)
 		types.WithSignature(newTx, sig)
-		fmt.Println("new intact header tx", hash.Hex())
+		fmt.Println("new intact header tx", hash.Hex(), newTx.Headers()[0].Hex())
 
 		if hibe.Verify(hibe.MasterPubKey, node.ID, types.HibeHash(newTx).Bytes(), int(node.LocalLevel), newTx.GetDhibeSig().CompressedBytesToSig()) {
 			fmt.Println("recover intact sig for headertx successfully", hash.Hex(), newTx.Headers()[0].Hex())
@@ -1402,6 +1402,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		//	pm.headerTxChan <- headertx
 
 		hash := types.HashTxCommon(headertx.Tx)
+		fmt.Println("receive headertxwithsig from", headertx.Index, headertx.Tx.Headers()[0].Hex())
 		pm.headerTxLock.Lock()
 		//	var txs []*types.Transaction
 		if _, ok := pm.headers[hash]; !ok {
@@ -1416,6 +1417,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 		pm.headersMark[headertx.Tx.Hash()] = struct{}{}
 		pm.headers[hash] = append(pm.headers[hash], headertx)
+		fmt.Println("headertxwithsig count", hash.Hex(), len(pm.headers[hash]), headertx.Tx.Headers()[0].Hex())
 		if uint32(len(pm.headers[hash])) >= node.Mn.M {
 			pm.headerTxChan <- hash
 		}
@@ -1619,7 +1621,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		peers := pm.peers.PeersWithoutTx(BlockHash)
 		for _, peer := range peers {
 			if peer.peerFlag == p2p.LowLevelPeer {
-				fmt.Println("send RootChainBlockHash to lower level")
+				//fmt.Println("send RootChainBlockHash to lower level")
 
 				p2p.Send(peer.rw, RootChainBlockHash, BlockHash)
 			}
@@ -1797,7 +1799,7 @@ func (pm *ProtocolManager) RequestHeaderTxWithPartSig(hash common.Hash, tx *type
 	peers := pm.peers.PeersWithoutTx(hash)
 	for _, peer := range peers {
 		if peer.peerFlag == p2p.CurrentLevelPeer {
-			fmt.Println("Request for HeaderTx With Part Sig")
+			fmt.Println("Request for HeaderTx With Part Sig", tx.Headers()[0].Hex())
 			peer.SendTransactions(types.Transactions{tx})
 		}
 	}

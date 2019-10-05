@@ -1088,14 +1088,14 @@ func (instance *pbftCore) recvRequestBlock(block *types.Block) error {
 	digest := block.Hash().Str() //=>replace hash(block) --Agzs
 
 	//=>logger.Debugf("Replica %d received a block %x", instance.id, digest)
-	log.Info("Replica received a block", "Replica(PeerID)", instance.id, "hash", common.StringToHash(digest))
+	//	log.Info("Replica received a block", "Replica(PeerID)", instance.id, "hash", common.StringToHash(digest))
 
 	instance.blockStore[digest] = block
 	instance.outstandingBlocks[digest] = block
 	instance.persistRequestBlock(digest) //=> save block whose hash equal with digest in database. --Agzs
 
 	//digest2 := block.Hash().Bytes() ////--xiaobei
-	logger.Debugf("Replica %d received a block %x", instance.id, digest)
+	//	logger.Debugf("Replica %d received a block %x", instance.id, digest)
 	if instance.activeView {
 		instance.softStartTimer(instance.requestTimeout, fmt.Sprintf("new block %x", digest))
 	}
@@ -1104,7 +1104,7 @@ func (instance *pbftCore) recvRequestBlock(block *types.Block) error {
 		instance.sendPrePrepare(block)
 	} else {
 		//=>logger.Debugf("Replica %d is backup, not sending pre-prepare for block %x", instance.id, digest)
-		log.Info("Replica is backup, not sending pre-prepare for block", "Replica(PeerID)", instance.id, "hash", common.StringToHash(digest))
+		//		log.Info("Replica is backup, not sending pre-prepare for block", "Replica(PeerID)", instance.id, "hash", common.StringToHash(digest))
 	}
 	return nil
 }
@@ -1117,10 +1117,10 @@ func (instance *pbftCore) sendPrePrepare(block *types.Block) {
 	}
 	digest := block.Hash().Bytes() /// digest is from block. --Zhiguo
 	//=>logger.Debugf("Replica %d is primary, issuing pre-prepare for block %x", instance.id, digest)
-	log.Info("Replica is primary, issuing pre-prepare for block", "Replica(PeerID)", instance.id, "hash", common.BytesToHash(digest))
+	//	log.Info("Replica is primary, issuing pre-prepare for block", "Replica(PeerID)", instance.id, "hash", common.BytesToHash(digest))
 	////xiaobei 10.16
 	n := instance.seqNo + 1
-	logger.Infof("digest in PrePrepare msg is %x", digest) ////test --xiaobei 11.9
+	//	logger.Infof("digest in PrePrepare msg is %x", digest) ////test --xiaobei 11.9
 	preprep := &types.PrePrepare{
 		// Timestamp: &timestamp.Timestamp{
 		// 	Seconds: now.Unix(),
@@ -1137,7 +1137,7 @@ func (instance *pbftCore) sendPrePrepare(block *types.Block) {
 	for _, cert := range instance.certStore { // check for other PRE-PREPARE for same digest, but different seqNo
 		if p := cert.prePrepare; p != nil {
 			if p.View == instance.view && p.SequenceNumber != n && string(p.BlockHash) == string(digest) && string(digest) != "" {
-				logger.Infof("Other pre-prepare found with same digest but different seqNo: %d instead of %d", p.SequenceNumber, n)
+				//	logger.Infof("Other pre-prepare found with same digest but different seqNo: %d instead of %d", p.SequenceNumber, n)
 				return
 			}
 		}
@@ -1145,16 +1145,16 @@ func (instance *pbftCore) sendPrePrepare(block *types.Block) {
 
 	if !instance.inWV(instance.view, n) || n > instance.h+instance.L/2 {
 		// We don't have the necessary stable certificates to advance our watermarks
-		logger.Warningf("Primary %d not sending pre-prepare for block %x - out of sequence numbers", instance.id, digest)
+		//logger.Warningf("Primary %d not sending pre-prepare for block %x - out of sequence numbers", instance.id, digest)
 		return
 	}
 
 	if n > instance.viewChangeSeqNo {
-		logger.Info("Primary %d about to switch to next primary, not sending pre-prepare with seqno=%d", instance.id, n)
+		//	logger.Info("Primary %d about to switch to next primary, not sending pre-prepare with seqno=%d", instance.id, n)
 		return
 	}
 
-	logger.Debugf("Primary %d broadcasting pre-prepare for view=%d/seqNo=%d and digest %x", instance.id, instance.view, n, digest)
+	//logger.Debugf("Primary %d broadcasting pre-prepare for view=%d/seqNo=%d and digest %x", instance.id, instance.view, n, digest)
 	instance.seqNo = n
 
 	cert := instance.getCert(instance.view, n)
@@ -1179,7 +1179,7 @@ func (instance *pbftCore) sendPrePrepare(block *types.Block) {
 	} //=>change --Agzs
 	instance.innerBroadcast(msg)
 
-	log.Info("Replica issued pre-prepare for block", "Replica(PeerID)", instance.id, "hash", common.BytesToHash(digest)) //=>test. --Agzs
+	//	log.Info("Replica issued pre-prepare for block", "Replica(PeerID)", instance.id, "hash", common.BytesToHash(digest)) //=>test. --Agzs
 	//instance.commChan <- &types.PbftMessage{Payload: &types.PbftMessage_PrePrepare{PrePrepare: preprep}}
 	instance.maybeSendCommit(string(digest), instance.view, n)
 }
@@ -1196,12 +1196,12 @@ outer:
 		for _, cert := range instance.certStore {
 			if cert.digest == d {
 				//=>logger.Debugf("Replica %d already has certificate for block %x - not going to resubmit", instance.id, d)
-				log.Info("Replica already has certificate for block - not going to resubmit", "Replica(PeerID)", instance.id, "hash", common.StringToHash(d))
+				//	log.Info("Replica already has certificate for block - not going to resubmit", "Replica(PeerID)", instance.id, "hash", common.StringToHash(d))
 				continue outer
 			}
 		}
 		//=>logger.Debugf("Replica %d has detected block %x must be resubmitted", instance.id, d)
-		log.Info("Replica has detected block must be resubmitted", "Replica(PeerID)", instance.id, "hash", common.StringToHash(d))
+		//log.Info("Replica has detected block must be resubmitted", "Replica(PeerID)", instance.id, "hash", common.StringToHash(d))
 		submissionOrder = append(submissionOrder, block)
 	}
 
@@ -1217,41 +1217,41 @@ outer:
 }
 
 func (instance *pbftCore) recvPrePrepare(preprep *types.PrePrepare) error {
-	logger.Debugf("Replica %d received pre-prepare from replica %d for view=%d/seqNo=%d",
-		instance.id, preprep.ReplicaId, preprep.View, preprep.SequenceNumber)
+	//logger.Debugf("Replica %d received pre-prepare from replica %d for view=%d/seqNo=%d",
+	//	instance.id, preprep.ReplicaId, preprep.View, preprep.SequenceNumber)
 
 	if !instance.activeView {
-		logger.Debugf("Replica %d ignoring pre-prepare as we are in a view change", instance.id)
+		//	logger.Debugf("Replica %d ignoring pre-prepare as we are in a view change", instance.id)
 		return nil
 	}
 
 	if instance.primary(instance.view) != preprep.ReplicaId {
-		logger.Warningf("Pre-prepare from other than primary: got %d, should be %d", preprep.ReplicaId, instance.primary(instance.view))
+		//	logger.Warningf("Pre-prepare from other than primary: got %d, should be %d", preprep.ReplicaId, instance.primary(instance.view))
 		return nil
 	}
 
 	//=>judge view and seqNo. --Agzs
-	logger.Infof("-----low wartermarks= %d", instance.h) ////xiaobei --1.4
+	//logger.Infof("-----low wartermarks= %d", instance.h) ////xiaobei --1.4
 	if !instance.inWV(preprep.View, preprep.SequenceNumber) {
 		if preprep.SequenceNumber != instance.h && !instance.skipInProgress {
-			logger.Warningf("Replica %d pre-prepare view different, or sequence number outside watermarks: preprep.View %d, expected.View %d, seqNo %d, low-mark %d", instance.id, preprep.View, instance.primary(instance.view), preprep.SequenceNumber, instance.h)
+			//	logger.Warningf("Replica %d pre-prepare view different, or sequence number outside watermarks: preprep.View %d, expected.View %d, seqNo %d, low-mark %d", instance.id, preprep.View, instance.primary(instance.view), preprep.SequenceNumber, instance.h)
 		} else {
 			// This is perfectly normal
-			logger.Debugf("Replica %d pre-prepare view different, or sequence number outside watermarks: preprep.View %d, expected.View %d, seqNo %d, low-mark %d", instance.id, preprep.View, instance.primary(instance.view), preprep.SequenceNumber, instance.h)
+			//	logger.Debugf("Replica %d pre-prepare view different, or sequence number outside watermarks: preprep.View %d, expected.View %d, seqNo %d, low-mark %d", instance.id, preprep.View, instance.primary(instance.view), preprep.SequenceNumber, instance.h)
 		}
 
 		return nil
 	}
 
 	if preprep.SequenceNumber > instance.viewChangeSeqNo {
-		logger.Info("Replica %d received pre-prepare for %d, which should be from the next primary", instance.id, preprep.SequenceNumber)
+		//	logger.Info("Replica %d received pre-prepare for %d, which should be from the next primary", instance.id, preprep.SequenceNumber)
 		instance.sendViewChange()
 		return nil
 	}
 
 	cert := instance.getCert(preprep.View, preprep.SequenceNumber)
 	if cert.digest != "" && cert.digest != string(preprep.BlockHash) { /// BatchDigest --> BlockHash. --Zhiguo
-		logger.Warningf("Pre-prepare found for same view/seqNo but different digest: received %s, stored %s", preprep.Block, cert.digest)
+		//	logger.Warningf("Pre-prepare found for same view/seqNo but different digest: received %s, stored %s", preprep.Block, cert.digest)
 		instance.sendViewChange()
 		return nil
 	}
@@ -1263,15 +1263,15 @@ func (instance *pbftCore) recvPrePrepare(preprep *types.PrePrepare) error {
 	////if the block not in the blockStore，store the block. xiaobei 10.16
 	if _, ok := instance.blockStore[string(preprep.BlockHash)]; !ok && string(preprep.BlockHash) != "" {
 		digest := string(preprep.Block.Hash().Bytes())
-		logger.Infof("digest from preprepare--digest := string(preprep.Block.Hash().Bytes())/cert.digest is %x", digest) ////test --xiaobei 11.9
+		//	logger.Infof("digest from preprepare--digest := string(preprep.Block.Hash().Bytes())/cert.digest is %x", digest) ////test --xiaobei 11.9
 		if digest != string(preprep.BlockHash) {
-			logger.Warningf("Pre-prepare and block digest do not match: request %s, digest %s", digest, preprep.Block.String())
+			//		logger.Warningf("Pre-prepare and block digest do not match: request %s, digest %s", digest, preprep.Block.String())
 			return nil
 		}
 		instance.blockStore[digest] = preprep.Block
 		//logger.Infof("block %x in preprep",digest) ////test--xiaobei 11.15
 		//logger.Debugf("Replica %d storing block %x in outstanding block store", instance.id, digest)
-		log.Info("Replica storing block in outstanding block store", "Replica(PeerID)", instance.id, "hash", common.StringToHash(digest))
+		//	log.Info("Replica storing block in outstanding block store", "Replica(PeerID)", instance.id, "hash", common.StringToHash(digest))
 
 		instance.outstandingBlocks[digest] = preprep.Block
 		instance.persistRequestBlock(digest) //=> --Agzs
@@ -1284,7 +1284,7 @@ func (instance *pbftCore) recvPrePrepare(preprep *types.PrePrepare) error {
 	instance.nullRequestTimer.Stop()
 
 	if instance.primary(instance.view) != instance.id && instance.prePrepared(string(preprep.BlockHash), preprep.View, preprep.SequenceNumber) && !cert.sentPrepare {
-		logger.Debugf("Backup %d broadcasting prepare for view=%d/seqNo=%d", instance.id, preprep.View, preprep.SequenceNumber)
+		//	logger.Debugf("Backup %d broadcasting prepare for view=%d/seqNo=%d", instance.id, preprep.View, preprep.SequenceNumber)
 		prep := &types.Prepare{
 			View:           preprep.View,
 			SequenceNumber: preprep.SequenceNumber,
@@ -1320,17 +1320,17 @@ func (instance *pbftCore) recvPrepare(prep *types.Prepare) error {
 		instance.id, prep.ReplicaId, prep.View, prep.SequenceNumber)
 
 	if instance.primary(prep.View) == prep.ReplicaId {
-		logger.Warningf("Replica %d received prepare from primary, ignoring", instance.id)
+		//	logger.Warningf("Replica %d received prepare from primary, ignoring", instance.id)
 		return nil
 	}
 
 	//=>TODO. --Agzs
 	if !instance.inWV(prep.View, prep.SequenceNumber) {
 		if prep.SequenceNumber != instance.h && !instance.skipInProgress {
-			logger.Warningf("Replica %d ignoring prepare for view=%d/seqNo=%d: not in-wv, in view %d, low water mark %d", instance.id, prep.View, prep.SequenceNumber, instance.view, instance.h)
+			//	logger.Warningf("Replica %d ignoring prepare for view=%d/seqNo=%d: not in-wv, in view %d, low water mark %d", instance.id, prep.View, prep.SequenceNumber, instance.view, instance.h)
 		} else {
 			// This is perfectly normal
-			logger.Debugf("Replica %d ignoring prepare for view=%d/seqNo=%d: not in-wv, in view %d, low water mark %d", instance.id, prep.View, prep.SequenceNumber, instance.view, instance.h)
+			//	logger.Debugf("Replica %d ignoring prepare for view=%d/seqNo=%d: not in-wv, in view %d, low water mark %d", instance.id, prep.View, prep.SequenceNumber, instance.view, instance.h)
 		}
 		return nil
 	}
@@ -1339,7 +1339,7 @@ func (instance *pbftCore) recvPrepare(prep *types.Prepare) error {
 
 	for _, prevPrep := range cert.prepare {
 		if prevPrep.ReplicaId == prep.ReplicaId {
-			logger.Warningf("Ignoring duplicate prepare from %d", prep.ReplicaId)
+			//	logger.Warningf("Ignoring duplicate prepare from %d", prep.ReplicaId)
 			return nil
 		}
 	}
@@ -1389,10 +1389,10 @@ func (instance *pbftCore) recvCommit(commit *types.Commit) error {
 	//=>TODO. --Agzs
 	if !instance.inWV(commit.View, commit.SequenceNumber) {
 		if commit.SequenceNumber != instance.h && !instance.skipInProgress {
-			logger.Warningf("Replica %d ignoring commit for view=%d/seqNo=%d: not in-wv, in view %d, low water mark %d", instance.id, commit.View, commit.SequenceNumber, instance.view, instance.h)
+			//	logger.Warningf("Replica %d ignoring commit for view=%d/seqNo=%d: not in-wv, in view %d, low water mark %d", instance.id, commit.View, commit.SequenceNumber, instance.view, instance.h)
 		} else {
 			// This is perfectly normal
-			logger.Debugf("Replica %d ignoring commit for view=%d/seqNo=%d: not in-wv, in view %d, low water mark %d", instance.id, commit.View, commit.SequenceNumber, instance.view, instance.h)
+			//	logger.Debugf("Replica %d ignoring commit for view=%d/seqNo=%d: not in-wv, in view %d, low water mark %d", instance.id, commit.View, commit.SequenceNumber, instance.view, instance.h)
 		}
 		return nil
 	}
@@ -1400,7 +1400,7 @@ func (instance *pbftCore) recvCommit(commit *types.Commit) error {
 	cert := instance.getCert(commit.View, commit.SequenceNumber)
 	for _, prevCommit := range cert.commit {
 		if prevCommit.ReplicaId == commit.ReplicaId {
-			logger.Warningf("Ignoring duplicate commit from %d", commit.ReplicaId)
+			//	logger.Warningf("Ignoring duplicate commit from %d", commit.ReplicaId)
 			return nil
 		}
 	}
@@ -1444,7 +1444,7 @@ func (instance *pbftCore) recvCommit(commit *types.Commit) error {
 		//=>instance.moveStore(commit.BlockHash) //=> delete some certStore and blockStore. --Agzs
 
 		if commit.SequenceNumber == instance.viewChangeSeqNo {
-			logger.Infof("Replica %d cycling view for seqNo=%d", instance.id, commit.SequenceNumber)
+			//	logger.Infof("Replica %d cycling view for seqNo=%d", instance.id, commit.SequenceNumber)
 			instance.sendViewChange()
 		}
 	}
@@ -1459,7 +1459,7 @@ func (instance *pbftCore) recvCommit(commit *types.Commit) error {
 //=> TODO. update highStateTarget to target. --Agzs
 func (instance *pbftCore) updateHighStateTarget(target *stateUpdateTarget) {
 	if instance.highStateTarget != nil && instance.highStateTarget.seqNo >= target.seqNo {
-		logger.Debugf("Replica %d not updating state target to seqNo %d, has target for seqNo %d", instance.id, target.seqNo, instance.highStateTarget.seqNo)
+		//	logger.Debugf("Replica %d not updating state target to seqNo %d, has target for seqNo %d", instance.id, target.seqNo, instance.highStateTarget.seqNo)
 		return
 	}
 
@@ -1469,7 +1469,7 @@ func (instance *pbftCore) updateHighStateTarget(target *stateUpdateTarget) {
 //=>TODO. change the state, like skipInProgress、Helper.valid  --Agzs
 func (instance *pbftCore) stateTransfer(optional *stateUpdateTarget) {
 	if !instance.skipInProgress {
-		logger.Debugf("Replica %d is out of sync, pending state transfer", instance.id)
+		//	logger.Debugf("Replica %d is out of sync, pending state transfer", instance.id)
 		instance.skipInProgress = true
 		instance.helper.InvalidateState()
 	}
@@ -1481,19 +1481,19 @@ func (instance *pbftCore) stateTransfer(optional *stateUpdateTarget) {
 //// xiaobei
 func (instance *pbftCore) retryStateTransfer(optional *stateUpdateTarget) {
 	if instance.currentExec != nil {
-		logger.Debugf("Replica %d is currently mid-execution, it must wait for the execution to complete before performing state transfer", instance.id)
+		//	logger.Debugf("Replica %d is currently mid-execution, it must wait for the execution to complete before performing state transfer", instance.id)
 		return
 	}
 
 	if instance.stateTransferring {
-		logger.Debugf("Replica %d is currently mid state transfer, it must wait for this state transfer to complete before initiating a new one", instance.id)
+		//	logger.Debugf("Replica %d is currently mid state transfer, it must wait for this state transfer to complete before initiating a new one", instance.id)
 		return
 	}
 
 	target := optional
 	if target == nil {
 		if instance.highStateTarget == nil {
-			logger.Debugf("Replica %d has no targets to attempt state transfer to, delaying", instance.id)
+			//	logger.Debugf("Replica %d has no targets to attempt state transfer to, delaying", instance.id)
 			return
 		}
 		target = instance.highStateTarget
@@ -1501,7 +1501,7 @@ func (instance *pbftCore) retryStateTransfer(optional *stateUpdateTarget) {
 
 	instance.stateTransferring = true
 
-	logger.Debugf("Replica %d is initiating state transfer to seqNo %d", instance.id, target.seqNo)
+	//logger.Debugf("Replica %d is initiating state transfer to seqNo %d", instance.id, target.seqNo)
 	instance.helper.skipTo(target.seqNo, target.id, target.replicas)
 
 }
@@ -1518,10 +1518,10 @@ func (instance *pbftCore) retryStateTransfer(optional *stateUpdateTarget) {
 ////xiaobei
 func (instance *pbftCore) executeOutstanding() {
 	if instance.currentExec != nil {
-		logger.Debugf("Replica %d not attempting to executeOutstanding because it is currently executing %d", instance.id, *instance.currentExec)
+		//logger.Debugf("Replica %d not attempting to executeOutstanding because it is currently executing %d", instance.id, *instance.currentExec)
 		return
 	}
-	logger.Debugf("Replica %d attempting to executeOutstanding", instance.id)
+	//logger.Debugf("Replica %d attempting to executeOutstanding", instance.id)
 
 	for idx := range instance.certStore {
 		if instance.executeOne(idx) {
@@ -1529,7 +1529,7 @@ func (instance *pbftCore) executeOutstanding() {
 		}
 	}
 
-	logger.Debugf("Replica %d certstore %+v", instance.id, instance.certStore)
+	//logger.Debugf("Replica %d certstore %+v", instance.id, instance.certStore)
 
 	instance.startTimerIfOutstandingBlocks() ////startTimerIfOutstandingRequests->startTimerIfOutstandingBlocks. --xiaobei
 }
@@ -1541,14 +1541,14 @@ func (instance *pbftCore) executeOne(idx msgID) bool {
 	if !ok {
 		logger.Infof("----can't get cert") ////xiaobei --12.28
 	}
-	logger.Infof("-----*instance.LastExec+1= %d", *instance.LastExec+1) ////xiaobei 1.3
+	//logger.Infof("-----*instance.LastExec+1= %d", *instance.LastExec+1) ////xiaobei 1.3
 	if idx.n != *instance.LastExec+1 || cert == nil || cert.prePrepare == nil {
-		logger.Infof("-------executeOne err") ////xiaobei 1.3
+		//logger.Infof("-------executeOne err") ////xiaobei 1.3
 		return false
 	}
 
 	if instance.skipInProgress {
-		logger.Debugf("Replica %d currently picking a starting point to resume, will not execute", instance.id)
+		//	logger.Debugf("Replica %d currently picking a starting point to resume, will not execute", instance.id)
 		return false
 	}
 
@@ -1565,7 +1565,7 @@ func (instance *pbftCore) executeOne(idx msgID) bool {
 	//logger.Infof("-----get block is %+v", block) ////xiaobei --12.28
 
 	if !instance.committed(digest, idx.v, idx.n) {
-		logger.Infof("-----block is not committed.") ////xiaobei --12.28
+		//	logger.Infof("-----block is not committed.") ////xiaobei --12.28
 		return false
 	}
 
@@ -1643,9 +1643,9 @@ func (instance *pbftCore) Checkpoint(seqNo uint64, id []byte) {
 
 ////xiaobei
 func (instance *pbftCore) execDoneSync() {
-	log.Info("execDoneSync()") //=>test. --Agzs
+	//log.Info("execDoneSync()") //=>test. --Agzs
 	if instance.currentExec != nil {
-		logger.Infof("Replica %d finished execution %d, trying next", instance.id, *instance.currentExec)
+		//	logger.Infof("Replica %d finished execution %d, trying next", instance.id, *instance.currentExec)
 		instance.LastExec = instance.currentExec
 		if *instance.LastExec%instance.K == 0 {
 			instance.Checkpoint(*instance.LastExec, instance.helper.getState())
@@ -1653,7 +1653,7 @@ func (instance *pbftCore) execDoneSync() {
 
 	} else {
 		// XXX This masks a bug, this should not be called when currentExec is nil
-		logger.Warningf("Replica %d had execDoneSync called, flagging ourselves as out of date", instance.id)
+		//	logger.Warningf("Replica %d had execDoneSync called, flagging ourselves as out of date", instance.id)
 		instance.skipInProgress = true
 	}
 	instance.currentExec = nil
@@ -2071,20 +2071,20 @@ func (instance *pbftCore) startTimerIfOutstandingBlocks() {
 }
 
 func (instance *pbftCore) softStartTimer(timeout time.Duration, reason string) {
-	logger.Debugf("Replica %d soft starting new view timer for %s: %s", instance.id, timeout, reason)
+	//	logger.Debugf("Replica %d soft starting new view timer for %s: %s", instance.id, timeout, reason)
 	instance.newViewTimerReason = reason
 	instance.timerActive = true
 	instance.newViewTimer.SoftReset(timeout, viewChangeTimerEvent{})
 }
 
 func (instance *pbftCore) startTimer(timeout time.Duration, reason string) {
-	logger.Debugf("Replica %d starting new view timer for %s: %s", instance.id, timeout, reason)
+	//	logger.Debugf("Replica %d starting new view timer for %s: %s", instance.id, timeout, reason)
 	instance.timerActive = true
 	instance.newViewTimer.Reset(timeout, viewChangeTimerEvent{})
 }
 
 func (instance *pbftCore) stopTimer() {
-	logger.Debugf("Replica %d stopping a running new view timer", instance.id)
+	//	logger.Debugf("Replica %d stopping a running new view timer", instance.id)
 	instance.timerActive = false
 	instance.newViewTimer.Stop()
 }
