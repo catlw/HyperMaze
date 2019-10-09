@@ -1175,7 +1175,7 @@ func (op *obcGeneric) getLastSeqNo() (uint64, error) {
 
 //ProcessEvent allow the primary to send a batch when the timer expires
 func (c *PBFT) ProcessEvent(event events.Event) events.Event {
-	logger.Debugf("Replica %d batch main thread looping", c.pbft.id)
+	//logger.Debugf("Replica %d batch main thread looping", c.pbft.id)
 	// switch et := event.(type) {
 	// case batchTimerEvent:
 	//         logger.Infof("Replica %d batch timer expired", op.pbft.id)

@@ -17,7 +17,6 @@
 package core
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -637,7 +636,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 	// If the transaction fails basic validation, discard it
 	if err := pool.validateTx(tx, local); err != nil {
 		log.Trace("Discarding invalid transaction", "hash", hash, "err", err)
-		fmt.Println("\nDiscarding invalid transaction:%x", hash.Hex(), err) ////xiaobei 2.5
+		fmt.Println("Discarding invalid transaction", hash.Hex(), err) ////xiaobei 2.5
 		invalidTxCounter.Inc(1)
 		return false, err
 	}
@@ -656,7 +655,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 		drop := pool.priced.Discard(len(pool.all)-int(pool.config.GlobalSlots+pool.config.GlobalQueue-1), pool.locals)
 		fmt.Printf("----New transaction is better than our worse ones")
 		for _, tx := range drop {
-			fmt.Printf("\nDiscarding freshly underpriced transaction:%x", hash) ////xiaobei 2.5
+			fmt.Printf("\nDiscarding freshly underpriced transaction:%s \n", hash.Hex()) ////xiaobei 2.5
 			log.Trace("Discarding freshly underpriced transaction", "hash", tx.Hash(), "price", tx.GasPrice())
 			underpricedTxCounter.Inc(1)
 			pool.removeTx(tx.Hash())
@@ -668,18 +667,18 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 	} else if tx.TxType() == types.TxDhibe || tx.TxType() == types.TxHeader || tx.TxType() == types.TxCrossChain {
 		signer = types.NewDHibeSigner()
 	}
-	if tx.TxType() == types.TxHeader {
-		if node.ResultFile != nil {
-			wt := bufio.NewWriter(node.ResultFile)
-			str := fmt.Sprintf(" txpool receive txheader: hash in tx is %s\n tx is %s", tx.Headers()[0].Hex(), tx.Hash().Hex())
-			_, err := wt.WriteString(str)
-			if err != nil {
-				log.Error("write error")
-			}
-			wt.Flush()
-		}
+	// if tx.TxType() == types.TxHeader {
+	// 	if node.ResultFile != nil {
+	// 		wt := bufio.NewWriter(node.ResultFile)
+	// 		str := fmt.Sprintf(" txpool receive txheader: hash in tx is %s\n tx is %s", tx.Headers()[0].Hex(), tx.Hash().Hex())
+	// 		_, err := wt.WriteString(str)
+	// 		if err != nil {
+	// 			log.Error("write error")
+	// 		}
+	// 		wt.Flush()
+	// 	}
 
-	}
+	// }
 	// If the transaction is replacing an already pending one, do directly
 	from, _ := types.Sender(signer, tx) // already validated
 	if list := pool.pending[from]; list != nil && list.Overlaps(tx) {
@@ -691,17 +690,17 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 		}
 		// New transaction is better, replace old one
 		if old != nil {
-			if old.TxType() == types.TxHeader {
-				if node.ResultFile != nil {
-					wt := bufio.NewWriter(node.ResultFile)
-					str := fmt.Sprintf(" txpool delete header %s", old.Headers()[0].Hex())
-					_, err := wt.WriteString(str)
-					if err != nil {
-						log.Error("write error")
-					}
-					wt.Flush()
-				}
-			}
+			// if old.TxType() == types.TxHeader {
+			// 	if node.ResultFile != nil {
+			// 		wt := bufio.NewWriter(node.ResultFile)
+			// 		str := fmt.Sprintf(" txpool delete header %s", old.Headers()[0].Hex())
+			// 		_, err := wt.WriteString(str)
+			// 		if err != nil {
+			// 			log.Error("write error")
+			// 		}
+			// 		wt.Flush()
+			// 	}
+			// }
 
 			delete(pool.all, old.Hash())
 			pool.priced.Removed()
@@ -860,7 +859,7 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 
 // addTxs attempts to queue a batch of transactions if they are valid.
 func (pool *TxPool) addTxs(txs []*types.Transaction, local bool) error {
-	fmt.Printf("-------addTxs") ////xiaobei 1.10
+	//fmt.Printf("-------addTxs\n") ////xiaobei 1.10
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 

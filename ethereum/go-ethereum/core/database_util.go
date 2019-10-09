@@ -17,7 +17,6 @@
 package core
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
@@ -31,7 +30,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
-	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 )
@@ -476,15 +474,16 @@ func WriteTransactions(db ethdb.Database, block *types.Block) error {
 				if err := db.Put(append(headerHash.Bytes(), headerTxMetaSuffix...), headerTxmetadata); err != nil {
 					return err
 				}
-				if node.ResultFile != nil {
-					wt := bufio.NewWriter(node.ResultFile)
-					str := fmt.Sprintf(" headertx  written  header hash： %s  data is :%v \n", headerHash.Hex(), headerTxmetadata)
-					_, err := wt.WriteString(str)
-					if err != nil {
-						log.Error("write error")
-					}
-					wt.Flush()
-				}
+				fmt.Println("written block hash from children", headerHash.Hex(), tx.Hash().Hex())
+				// if node.ResultFile != nil {
+				// 	wt := bufio.NewWriter(node.ResultFile)
+				// 	str := fmt.Sprintf(" headertx  written  header hash： %s  data is :%v \n", headerHash.Hex(), headerTxmetadata)
+				// 	_, err := wt.WriteString(str)
+				// 	if err != nil {
+				// 		log.Error("write error")
+				// 	}
+				// 	wt.Flush()
+				// }
 			}
 
 		}

@@ -353,7 +353,7 @@ func (op *obcBatch) resubmitOutstandingReqs() events.Event {
 
 // allow the primary to send a batch when the timer expires
 func (op *obcBatch) ProcessEvent(event events.Event) events.Event {
-	logger.Debugf("Replica %d batch main thread looping", op.pbft.id)
+	//logger.Debugf("Replica %d batch main thread looping", op.pbft.id)
 	switch et := event.(type) {
 	case batchMessageEvent:
 		ocMsg := et
@@ -361,7 +361,7 @@ func (op *obcBatch) ProcessEvent(event events.Event) events.Event {
 	case executedEvent:
 		op.stack.Commit(nil, et.tag.([]byte))
 	case committedEvent:
-		logger.Debugf("Replica %d received committedEvent", op.pbft.id)
+		//logger.Debugf("Replica %d received committedEvent", op.pbft.id)
 		return execDoneEvent{}
 	case execDoneEvent:
 		if res := op.pbft.ProcessEvent(event); res != nil {
@@ -370,7 +370,7 @@ func (op *obcBatch) ProcessEvent(event events.Event) events.Event {
 		}
 		return op.resubmitOutstandingReqs()
 	case batchTimerEvent:
-		logger.Infof("Replica %d batch timer expired", op.pbft.id)
+		//logger.Infof("Replica %d batch timer expired", op.pbft.id)
 		if op.pbft.activeView && (len(op.batchStore) > 0) {
 			return op.sendBatch()
 		}
@@ -386,7 +386,7 @@ func (op *obcBatch) ProcessEvent(event events.Event) events.Event {
 		// so, on view change, clear it out
 		op.pbft.outstandingReqBatches = make(map[string]*RequestBatch)
 
-		logger.Debugf("Replica %d batch thread recognizing new view", op.pbft.id)
+		//logger.Debugf("Replica %d batch thread recognizing new view", op.pbft.id)
 		if op.batchTimerActive {
 			op.stopBatchTimer()
 		}
@@ -413,7 +413,7 @@ func (op *obcBatch) ProcessEvent(event events.Event) events.Event {
 			}
 
 			if cert.prePrepare.RequestBatch == nil {
-				logger.Warningf("Replica %d found a non-null prePrepare with no request batch, ignoring")
+				//logger.Warningf("Replica %d found a non-null prePrepare with no request batch, ignoring")
 				continue
 			}
 
@@ -434,13 +434,13 @@ func (op *obcBatch) ProcessEvent(event events.Event) events.Event {
 
 func (op *obcBatch) startBatchTimer() {
 	op.batchTimer.Reset(op.batchTimeout, batchTimerEvent{})
-	logger.Debugf("Replica %d started the batch timer", op.pbft.id)
+	//logger.Debugf("Replica %d started the batch timer", op.pbft.id)
 	op.batchTimerActive = true
 }
 
 func (op *obcBatch) stopBatchTimer() {
 	op.batchTimer.Stop()
-	logger.Debugf("Replica %d stopped the batch timer", op.pbft.id)
+	//logger.Debugf("Replica %d stopped the batch timer", op.pbft.id)
 	op.batchTimerActive = false
 }
 
@@ -469,13 +469,13 @@ func (op *obcBatch) getManager() events.Manager {
 func (op *obcBatch) startTimerIfOutstandingRequests() {
 	if op.pbft.skipInProgress || op.pbft.currentExec != nil || !op.pbft.activeView {
 		// Do not start view change timer if some background event is in progress
-		logger.Debugf("Replica %d not starting timer because skip in progress or current exec or in view change", op.pbft.id)
+		//logger.Debugf("Replica %d not starting timer because skip in progress or current exec or in view change", op.pbft.id)
 		return
 	}
 
 	if !op.reqStore.hasNonPending() {
 		// Only start a timer if we are aware of outstanding requests
-		logger.Debugf("Replica %d not starting timer because all outstanding requests are pending", op.pbft.id)
+		//logger.Debugf("Replica %d not starting timer because all outstanding requests are pending", op.pbft.id)
 		return
 	}
 	op.pbft.softStartTimer(op.pbft.requestTimeout, "Batch outstanding requests")

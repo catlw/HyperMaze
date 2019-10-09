@@ -17,6 +17,7 @@
 package ethapi
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/binary"
@@ -1468,6 +1469,9 @@ func (s *PublicTransactionPoolAPI) SendTransaction3(ctx context.Context, args Se
 		fmt.Println("too many terminals")
 		return 0, nil
 	}
+	var dura float64 = 0
+	var dura_verify float64 = 0
+	var verifycount = 0
 	for ; currentRound < args.Round; currentRound++ {
 		for id, key := range hibe.IDKey {
 			if err := args.setDefaults(ctx, s.b); err != nil {
@@ -1494,29 +1498,46 @@ func (s *PublicTransactionPoolAPI) SendTransaction3(ctx context.Context, args Se
 				tx.SetCrossAddress()
 			}
 			hibe.PrivateKey = key
-			types.DHibeSignTx(tx)
-			//		if hibe.Verify(hibe.MasterPubKey, idss, []byte("helloworld"), int(hibe.Level), sig)
-			if hibe.Verify(hibe.MasterPubKey, id, types.HibeHash(tx).Bytes(), int(hibe.Level), tx.GetDhibeSig().CompressedBytesToSig()) == false {
-				continue
-			}
 
+			start := time.Now()
+			types.DHibeSignTx(tx)
+			end := time.Now()
+			//		if hibe.Verify(hibe.MasterPubKey, idss, []byte("helloworld"), int(hibe.Level), sig)
+			start_verify := time.Now()
+			f := hibe.Verify(hibe.MasterPubKey, id, types.HibeHash(tx).Bytes(), int(hibe.Level), tx.GetDhibeSig().CompressedBytesToSig())
+			verifycount++
+			end_verify := time.Now()
+			dura_verify += end_verify.Sub(start_verify).Seconds()
+			if f == false {
+				continue
+
+			}
+			dura += end.Sub(start).Seconds()
 			signedTx = append(signedTx, tx)
 			count++
 			if count >= args.Ternimal {
 				break
 			}
 		}
-		start := time.Now()
-		// end := time.Now()
-		// if node.ResultFile != nil {
-		// 	wt := bufio.NewWriter(node.ResultFile)
-		// 	str := fmt.Sprintf("time for node %d ShadowSign  is :%v:\n", node.NodeIndex, end.Sub(start))
+
+		//start := time.Now()
+		//end := time.Now()
+		if node.ResultFile != nil {
+			wt := bufio.NewWriter(node.ResultFile)
+			str := fmt.Sprintf("ShadowSign  %.3f\n", dura/float64(count))
+			str_verify := fmt.Sprintf("Verify  %.3f\n", dura_verify/float64(verifycount))
+			s := str + str_verify
+			_, err := wt.WriteString(s)
+			if err != nil {
+				log.Error("write error")
+			}
+			wt.Flush()
+		}
 		for _, tx := range signedTx {
 			s.b.SendBatch([]*types.Transaction{tx})
 			time.Sleep(time.Duration(ms) * time.Millisecond)
 		}
-		end := time.Now()
-		fmt.Println("sending time ", end.Sub(start))
+
 	}
 	return uint32(len(signedTx)), nil
 

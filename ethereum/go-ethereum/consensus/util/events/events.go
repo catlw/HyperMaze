@@ -87,7 +87,7 @@ var ManagerImpl *managerImpl ////xiaobei 1.2
 // NewManagerImpl creates an instance of managerImpl
 func NewManagerImpl() Manager {
 	ManagerImpl = &managerImpl{ ////xiaobei 1.2
-		events:   make(chan Event,1), ////xiaobei 1.9
+		events:   make(chan Event, 1), ////xiaobei 1.9
 		threaded: threaded{make(chan struct{})},
 	}
 	return ManagerImpl
@@ -115,7 +115,7 @@ func SendEvent(receiver Receiver, event Event) {
 		// If an event returns something non-nil, then process it as a new event
 		next = receiver.ProcessEvent(next)
 		if next == nil {
-			logger.Infof("event is nil,will break") ////teset--xiaobei 11.22
+			//logger.Infof("event is nil,will break") ////teset--xiaobei 11.22
 			break
 		}
 	}
@@ -126,7 +126,7 @@ func (em *managerImpl) Inject(event Event) {
 	if em.receiver != nil {
 		SendEvent(em.receiver, event)
 	} else {
-		logger.Infof("----em.receiver==nil") ////test--xiaobei 11.22
+		//logger.Infof("----em.receiver==nil") ////test--xiaobei 11.22
 	}
 }
 

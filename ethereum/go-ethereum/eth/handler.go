@@ -354,7 +354,7 @@ func (pm *ProtocolManager) processRootChainBlock() {
 
 func (pm *ProtocolManager) addHeaderWithSigLoop() {
 	for hash := range pm.headerTxChan {
-		fmt.Println("recovering intact sig for headertx ", hash.Hex())
+		//fmt.Println("recovering intact sig for headertx ", hash.Hex())
 		pm.headerTxLock.Lock()
 		txs := pm.headers[hash]
 		pm.headerTxLock.Unlock()
@@ -379,10 +379,10 @@ func (pm *ProtocolManager) addHeaderWithSigLoop() {
 		//db := pm.chaindb
 		//db.Put(append(sender.Bytes(), core.AddressNonceSuffix...), nonceBytes)
 		types.WithSignature(newTx, sig)
-		fmt.Println("new intact header tx", hash.Hex(), newTx.Headers()[0].Hex())
+		//fmt.Println("new intact header tx", hash.Hex(), newTx.Headers()[0].Hex())
 
 		if hibe.Verify(hibe.MasterPubKey, node.ID, types.HibeHash(newTx).Bytes(), int(node.LocalLevel), newTx.GetDhibeSig().CompressedBytesToSig()) {
-			fmt.Println("recover intact sig for headertx successfully", hash.Hex(), newTx.Headers()[0].Hex())
+			//fmt.Println("recover intact sig for headertx successfully", hash.Hex(), newTx.Headers()[0].Hex())
 			peers := pm.peers.PeersWithoutTx(hash)
 
 			for _, peer := range peers {
@@ -481,15 +481,11 @@ func (pm *ProtocolManager) handle(p *peer) error {
 	if daoBlock := pm.chainconfig.DAOForkBlock; daoBlock != nil {
 		// Request the peer's DAO fork header for extra-data validation
 		if err := p.RequestHeadersByNumber(daoBlock.Uint64(), 1, 0, false); err != nil {
-			fmt.Println("bbb remove")
-
 			return err
 		}
 		// Start a timer to disconnect if the peer doesn't reply in time
 		p.forkDrop = time.AfterFunc(daoChallengeTimeout, func() {
 			p.Log().Debug("Timed out DAO fork-check, dropping")
-			fmt.Println("ccc remove")
-
 			pm.removePeer(p.id)
 		})
 		// Make sure it's cleaned up if the peer dies off
@@ -646,7 +642,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		random := data.BigIntToRandom()
 		pm.Random = random.Random
 		pm.Randoms = random.Randoms
-		fmt.Println("receive randoms\n")
+		//fmt.Println("receive randoms\n")
 		//fmt.Println(pm.Randoms)
 
 	case msg.Code == MasterShadowMsg: //the upppest level node receive a private key
@@ -679,7 +675,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		log.Info("handleMsg() ---RequestMNMsg-----------")
 
 		if node.Mn.M == 0 || node.Mn.N == 0 {
-			log.Info("local node has no mn for others")
+			//log.Info("local node has no mn for others")
 			break
 		}
 		if p.peerFlag == p2p.CurrentLevelPeer { //receive a request for mn from other same level nodes
@@ -1453,18 +1449,18 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			log.Error("R does not exist ")
 			break
 		}
-		//start := time.Now()
+		start := time.Now()
 		privateKey := hibe.ShadowGen(pm.privateKey, pm.masterPublickey, pm.Randoms, pm.R, data.Address, int(data.Index), int(data.Level))
-		// end := time.Now()
-		// if node.ResultFile != nil {
-		// 	wt := bufio.NewWriter(node.ResultFile)
-		// 	str := fmt.Sprintf("time for node %d ShadowGen  is :%v:\n", node.NodeIndex, end.Sub(start))
-		// 	_, err := wt.WriteString(str)
-		// 	if err != nil {
-		// 		log.Error("write error")
-		// 	}
-		// 	wt.Flush()
-		// }
+		end := time.Now()
+		if node.ResultFile != nil {
+			wt := bufio.NewWriter(node.ResultFile)
+			str := fmt.Sprintf("ShadowGen %d %.3f:\n", node.NodeIndex, end.Sub(start).Seconds())
+			_, err := wt.WriteString(str)
+			if err != nil {
+				log.Error("write error")
+			}
+			wt.Flush()
+		}
 		err := p2p.Send(p.rw, KeyMsg, ShadowData{Index: node.NodeIndex, MasterPubKey: pm.masterPublickey.MasterPubkeyToBytes(), Shadow: privateKey.ShadowToBytes()})
 
 		//fmt.Printf("send private key piece to %d\n", data.Index)
@@ -1481,7 +1477,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			id := data.Address
 			baseid := id[0 : len(id)-2]
 			var i uint16
-			for i = 1; i < 500; i++ {
+			for i = 1; i < 400; i++ {
 				var b1, b2 byte
 				b1 = byte(i >> 8)
 				b2 = byte(i)
@@ -1552,6 +1548,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				}
 				tmpkey := hibe.KeyRecon(keys, indexs)
 				//fmt.Println(tmpkey, hibe.MasterPubKey, []byte("helloworld"), hibe.Random)
+
 				sig := hibe.ShadowSign(tmpkey, hibe.MasterPubKey, []byte("helloworld"), hibe.Random)
 				t := hibe.Verify(hibe.MasterPubKey, idss, []byte("helloworld"), int(hibe.Level), sig)
 				if t {
@@ -1691,12 +1688,30 @@ func (pm *ProtocolManager) maybeMakeupPrivateKey() {
 		indexs = append(indexs, int(index))
 		keys = append(keys, key)
 	}
-
+	start := time.Now()
 	pm.privateKey = hibe.KeyRecon(keys, indexs)
+	end := time.Now()
+	if node.LocalLevel != 0 {
+		if node.ResultFile != nil {
+			wt := bufio.NewWriter(node.ResultFile)
+			str := fmt.Sprintf("KeyRecon %d %d %d %.3f\n", node.NodeIndex, node.Mn.M, node.Mn.N, end.Sub(start).Seconds())
+			str_kengen := fmt.Sprintf("KeyGen %d %d %d %.3f\n", node.NodeIndex, node.ParentMn.M, node.ParentMn.N, end.Sub(node.KeyRequestTime).Seconds())
+			s := str + str_kengen
+			_, err := wt.WriteString(s)
+			if err != nil {
+				log.Error("write error")
+			}
+			wt.Flush()
+			//fmt.Println(node.NodeIndex, "genereate key at time:", node.KeyGenerateTime)
+			fmt.Println(node.NodeIndex, "total time for generating privatekey:", node.KeyGenerateTime.Sub(node.KeyRequestTime))
+		}
+
+	}
+
 	hibe.PrivateKey = pm.privateKey
 	node.KeyStatus <- true
 	// if pm.privateKey != nil {
-	// 	log.Info("key generate succeed ,the key is")
+
 	// 	node.KeyGenerateTime = time.Now()
 	// 	if node.LocalLevel != 0 {
 	// 		wt := bufio.NewWriter(node.ResultFile)
@@ -1850,14 +1865,14 @@ func (pm *ProtocolManager) BroadcastMsg(msg *types.PbftMessage) {
 
 	//=>for _, peer := range pm.peers.peers { //=> peer=>peers=>peerSet=>pm, change pm.peers to pm.peerSet.peers? --Agzs
 	for _, peer := range peers {
-		log.Info("peer broadcast msg", "peer", peer.id, "send msg's hash:", hash) //=>test. --Agzs
+		//log.Info("peer broadcast msg", "peer", peer.id, "send msg's hash:", hash) //=>test. --Agzs
 		if peer.peerFlag == p2p.CurrentLevelPeer {
 			// just send PbftMessage to Current level peer except ordinary peer, since ordinary peer is not signer. --Agzs
 			peer.SendMsg(msg)
 		}
 		//=>peer.SendMsg(msg)
 	}
-	log.Info("pm.BroadcastMsg() end------------") //=>test. --Agzs
+	//log.Info("pm.BroadcastMsg() end------------") //=>test. --Agzs
 
 	log.Trace("Broadcast pbftMsg", "hash", hash, "recipients", len(pm.peers.peers)) //=> peers ->  pm.peers.peers --Agzs
 }
@@ -2004,7 +2019,7 @@ func (self *ProtocolManager) processRequestMN() {
 		for _, peer := range peers {
 			if peer.peerFlag == p2p.CurrentLevelPeer {
 				err := p2p.Send(peer.rw, RequestMNMsg, struct{}{})
-				log.Info("send MNRequest to others")
+				//log.Info("send MNRequest to others")
 				if err != nil {
 					log.Error("send MNRequest error")
 				}
@@ -2094,16 +2109,16 @@ func (self *ProtocolManager) processSetID() {
 			if m == 0 || n == 0 {
 				continue
 			}
-			//start := time.Now()
+			start := time.Now()
 			masterPubkey, masterKeys, err := hibe.Setup(int(totalLevel), int(m), int(n))
-			// end := time.Now()
-			// diff := end.Sub(start)
-			// if node.ResultFile != nil {
-			// 	wt := bufio.NewWriter(node.ResultFile)
-			// 	str := fmt.Sprintf("time for node %d seting up is:%v\n", node.NodeIndex, diff)
-			// 	_, err = wt.WriteString(str)
-			// 	wt.Flush()
-			// }
+			end := time.Now()
+			diff := end.Sub(start)
+			if node.ResultFile != nil {
+				wt := bufio.NewWriter(node.ResultFile)
+				str := fmt.Sprintf("setup %d %d %.3f\n", node.LocalLevel, node.NodeIndex, diff.Seconds())
+				_, err = wt.WriteString(str)
+				wt.Flush()
+			}
 			//	masterPubkey, masterKeys, err := hibe.Setup(4, 4, 4)
 			if err != nil {
 				log.Error("setup error")
@@ -2183,8 +2198,8 @@ func (self *ProtocolManager) SendShadow() {
 
 			err := p2p.Send(peer.rw, MasterShadowMsg, ShadowData{Shadow: shadows[index-1].ShadowToBytes(), MasterPubKey: self.masterPublickey.MasterPubkeyToBytes(), Index: index})
 
-			fmt.Println("send shadow", shadows[index-1], "pub", self.masterPublickey)
-			fmt.Println("shadow bytes", shadows[index-1].ShadowToBytes())
+			fmt.Println("send shadow to", index)
+			//fmt.Println("shadow bytes", shadows[index-1].ShadowToBytes())
 			if err != nil {
 				log.Error("send shadow error")
 			}
@@ -2414,6 +2429,16 @@ func (pm *ProtocolManager) Insert(block *types.Block) {
 		}
 		fetcher.FetcherFlag = true ////xiaobei 1.18
 		// Run the actual import and log any issues
+
+		if node.ResultFile != nil {
+			wt := bufio.NewWriter(node.ResultFile)
+			str := fmt.Sprintf(" block %d  before write is :%v:\n", block.Number(), time.Now())
+			_, err := wt.WriteString(str)
+			if err != nil {
+				log.Error("write error")
+			}
+			wt.Flush()
+		}
 		if _, err := pm.fetcher.InsertChain(types.Blocks{block}); err != nil {
 			fmt.Println("Propagated block import failed", "number", block.Number(), "hash", hash, "err", err)
 			log.Debug("Propagated block import failed", "number", block.Number(), "hash", hash, "err", err)

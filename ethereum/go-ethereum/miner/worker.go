@@ -578,14 +578,24 @@ func (self *worker) commitNewWork() {
 		fmt.Printf("-----Failed to fetch pending transactions", err)
 		log.Error("Failed to fetch pending transactions", "err", err)
 		return
-	} else {
-		for _, tx := range pending {
-			fmt.Printf("pending tx is %+v\n", tx)
-		}
 	}
+	// else {
+	// 	for _, tx := range pending {
+	// 		//fmt.Printf("pending tx is %+v\n", tx)
+	// 	}
+	// }
 	txs := types.NewTransactionsByPriceAndNonce(pending)
 	work.commitTransactions(self.mux, txs, self.chain, self.coinbase)
 
+	if node.ResultFile != nil {
+		wt := bufio.NewWriter(node.ResultFile)
+		str := fmt.Sprintf(" block %d  after prepare time is :%v:\n", header.Number, time.Now())
+		_, err := wt.WriteString(str)
+		if err != nil {
+			log.Error("write error")
+		}
+		wt.Flush()
+	}
 	self.eth.TxPool().RemoveBatch(work.failedTxs)
 
 	// compute uncles for the new block.

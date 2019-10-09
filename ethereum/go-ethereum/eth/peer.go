@@ -156,7 +156,7 @@ func (p *peer) MarkBlock(hash common.Hash) {
 // will never be propagated to this particular peer.
 func (p *peer) MarkTransaction(hash common.Hash) {
 	// If we reached the memory allowance, drop a previously known transaction hash
-	fmt.Println("---------MarkTransaction")
+	fmt.Println("---------MarkTransaction", hash.Hex())
 	for p.knownTxs.Size() >= maxKnownTxs {
 		p.knownTxs.Pop()
 	}
