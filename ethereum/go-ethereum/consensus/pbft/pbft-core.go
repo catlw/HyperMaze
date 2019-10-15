@@ -21,6 +21,7 @@ limitations under the License.
 package pbft
 
 import (
+	"bufio"
 	"encoding/base64"
 	"fmt"
 	"math/rand" //=> Agzs
@@ -1041,18 +1042,18 @@ func (instance *pbftCore) maybeVerify() error {
 		indexes = append(indexes, int(msg.NodeIndex))
 		i++
 	}
-	//start := time.Now()
+	start := time.Now()
 	sig := hibe.SignRecon(signatures, indexes)
-	// end := time.Now()
-	// if node.ResultFile != nil {
-	// 	wt := bufio.NewWriter(node.ResultFile)
-	// 	str := fmt.Sprintf("time for node %d reconstructing signature is :%v:\n", node.NodeIndex, end.Sub(start))
-	// 	_, err := wt.WriteString(str)
-	// 	if err != nil {
-	// 		log.Error("write error")
-	// 	}
-	// 	wt.Flush()
-	// }
+	end := time.Now()
+	if node.ResultFile != nil {
+		wt := bufio.NewWriter(node.ResultFile)
+		str := fmt.Sprintf("SignRecon  %.3f:\n", end.Sub(start).Seconds())
+		_, err := wt.WriteString(str)
+		if err != nil {
+			log.Error("write error")
+		}
+		wt.Flush()
+	}
 
 	if hibe.Verify(hibe.MasterPubKey, node.ID, []byte(str), int(hibe.Level), sig) {
 		log.Info("verify hibe succeed!\n")

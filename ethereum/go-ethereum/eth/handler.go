@@ -364,7 +364,11 @@ func (pm *ProtocolManager) addHeaderWithSigLoop() {
 			sigs = append(sigs, tx.Tx.GetDhibeSig().CompressedBytesToSig())
 			index = append(index, int(tx.Index))
 		}
+
+		start := time.Now()
 		sigrecon := hibe.SignRecon(sigs, index)
+		end := time.Now()
+
 		sig := sigrecon.SigToCompressedBytes()
 		sender := txs[0].Tx.Sender()
 		nonce := txs[0].Tx.Nonce()
@@ -381,6 +385,18 @@ func (pm *ProtocolManager) addHeaderWithSigLoop() {
 		types.WithSignature(newTx, sig)
 		//fmt.Println("new intact header tx", hash.Hex(), newTx.Headers()[0].Hex())
 
+		end_headertime := time.Now()
+		if node.ResultFile != nil {
+			wt := bufio.NewWriter(node.ResultFile)
+			str := fmt.Sprintf("SignRecon  %.3f\n", end.Sub(start).Seconds())
+			str_headertx := fmt.Sprintf("SignHeaderTx time is :%v\n", end_headertime.Sub(node.NewHeaderTime).Seconds())
+			s := str + str_headertx
+			_, err := wt.WriteString(s)
+			if err != nil {
+				log.Error("write error")
+			}
+			wt.Flush()
+		}
 		if hibe.Verify(hibe.MasterPubKey, node.ID, types.HibeHash(newTx).Bytes(), int(node.LocalLevel), newTx.GetDhibeSig().CompressedBytesToSig()) {
 			//fmt.Println("recover intact sig for headertx successfully", hash.Hex(), newTx.Headers()[0].Hex())
 			peers := pm.peers.PeersWithoutTx(hash)
@@ -1470,39 +1486,39 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		if err != nil {
 			log.Error("send key to lower level nodes error")
 		}
-		if node.LocalLevel == node.TotalLevel-1 {
+		// if node.LocalLevel == node.TotalLevel-1 {
 
-			ID2Key := make(map[string]*hibe.ShadowBytes)
-			var keys []hibe.KeyAndID
-			id := data.Address
-			baseid := id[0 : len(id)-2]
-			var i uint16
-			for i = 1; i < 400; i++ {
-				var b1, b2 byte
-				b1 = byte(i >> 8)
-				b2 = byte(i)
-				if b1 == byte(0) {
-					b1 = byte(1)
-				}
-				if b2 == byte(0) {
-					b2 = byte(1)
-				}
-				bs := []byte{b1, b2}
-				tempid := baseid + string(bs[:])
-				pk := hibe.ShadowGen(pm.privateKey, pm.masterPublickey, pm.Randoms, pm.R, tempid, int(data.Index), int(data.Level))
-				ID2Key[tempid] = pk.ShadowToBytes()
-			}
-			for id, key := range ID2Key {
-				keys = append(keys, hibe.KeyAndID{key, id})
-			}
-			sd := BatchData{Index: node.NodeIndex, Keys: keys}
-			err := p2p.Send(p.rw, ReplyBatch, sd)
-			if err != nil {
-				log.Error("send batchkey to lower level nodes error")
-				fmt.Println(err)
-			}
+		// 	ID2Key := make(map[string]*hibe.ShadowBytes)
+		// 	var keys []hibe.KeyAndID
+		// 	id := data.Address
+		// 	baseid := id[0 : len(id)-2]
+		// 	var i uint16
+		// 	for i = 1; i < 400; i++ {
+		// 		var b1, b2 byte
+		// 		b1 = byte(i >> 8)
+		// 		b2 = byte(i)
+		// 		if b1 == byte(0) {
+		// 			b1 = byte(1)
+		// 		}
+		// 		if b2 == byte(0) {
+		// 			b2 = byte(1)
+		// 		}
+		// 		bs := []byte{b1, b2}
+		// 		tempid := baseid + string(bs[:])
+		// 		pk := hibe.ShadowGen(pm.privateKey, pm.masterPublickey, pm.Randoms, pm.R, tempid, int(data.Index), int(data.Level))
+		// 		ID2Key[tempid] = pk.ShadowToBytes()
+		// 	}
+		// 	for id, key := range ID2Key {
+		// 		keys = append(keys, hibe.KeyAndID{key, id})
+		// 	}
+		// 	sd := BatchData{Index: node.NodeIndex, Keys: keys}
+		// 	err := p2p.Send(p.rw, ReplyBatch, sd)
+		// 	if err != nil {
+		// 		log.Error("send batchkey to lower level nodes error")
+		// 		fmt.Println(err)
+		// 	}
 
-		}
+		// }
 
 		log.Info("handleMsg ----SetAddressMsg------end")
 
@@ -1709,7 +1725,7 @@ func (pm *ProtocolManager) maybeMakeupPrivateKey() {
 	}
 
 	hibe.PrivateKey = pm.privateKey
-	node.KeyStatus <- true
+	node.KeyStat = true
 	// if pm.privateKey != nil {
 
 	// 	node.KeyGenerateTime = time.Now()
@@ -1883,7 +1899,7 @@ func (pm *ProtocolManager) SetPrivateKey(pk *hibe.SecretShadow) {
 		return
 	}
 	pm.privateKey = pk
-	node.KeyStatus <- true
+	node.KeyStat = true
 	fmt.Println("local node set private key", pk)
 }
 

@@ -187,6 +187,7 @@ func (self *worker) addHeader(hash *common.Hash) *types.Transaction {
 
 			}
 
+			node.NewHeaderTime = time.Now()
 			tx = types.NewHeaderTransaction(nonce, self.headers, &address, node.LocalLevel)
 			nonce += 1
 			nonceBytes, err = rlp.EncodeToBytes(nonce)
