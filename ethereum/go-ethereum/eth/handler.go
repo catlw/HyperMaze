@@ -1486,39 +1486,39 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		if err != nil {
 			log.Error("send key to lower level nodes error")
 		}
-		// if node.LocalLevel == node.TotalLevel-1 {
+		if node.LocalLevel == node.TotalLevel-1 {
 
-		// 	ID2Key := make(map[string]*hibe.ShadowBytes)
-		// 	var keys []hibe.KeyAndID
-		// 	id := data.Address
-		// 	baseid := id[0 : len(id)-2]
-		// 	var i uint16
-		// 	for i = 1; i < 400; i++ {
-		// 		var b1, b2 byte
-		// 		b1 = byte(i >> 8)
-		// 		b2 = byte(i)
-		// 		if b1 == byte(0) {
-		// 			b1 = byte(1)
-		// 		}
-		// 		if b2 == byte(0) {
-		// 			b2 = byte(1)
-		// 		}
-		// 		bs := []byte{b1, b2}
-		// 		tempid := baseid + string(bs[:])
-		// 		pk := hibe.ShadowGen(pm.privateKey, pm.masterPublickey, pm.Randoms, pm.R, tempid, int(data.Index), int(data.Level))
-		// 		ID2Key[tempid] = pk.ShadowToBytes()
-		// 	}
-		// 	for id, key := range ID2Key {
-		// 		keys = append(keys, hibe.KeyAndID{key, id})
-		// 	}
-		// 	sd := BatchData{Index: node.NodeIndex, Keys: keys}
-		// 	err := p2p.Send(p.rw, ReplyBatch, sd)
-		// 	if err != nil {
-		// 		log.Error("send batchkey to lower level nodes error")
-		// 		fmt.Println(err)
-		// 	}
+			ID2Key := make(map[string]*hibe.ShadowBytes)
+			var keys []hibe.KeyAndID
+			id := data.Address
+			baseid := id[0 : len(id)-2]
+			var i uint16
+			for i = 1; i < 400; i++ {
+				var b1, b2 byte
+				b1 = byte(i >> 8)
+				b2 = byte(i)
+				if b1 == byte(0) {
+					b1 = byte(1)
+				}
+				if b2 == byte(0) {
+					b2 = byte(1)
+				}
+				bs := []byte{b1, b2}
+				tempid := baseid + string(bs[:])
+				pk := hibe.ShadowGen(pm.privateKey, pm.masterPublickey, pm.Randoms, pm.R, tempid, int(data.Index), int(data.Level))
+				ID2Key[tempid] = pk.ShadowToBytes()
+			}
+			for id, key := range ID2Key {
+				keys = append(keys, hibe.KeyAndID{key, id})
+			}
+			sd := BatchData{Index: node.NodeIndex, Keys: keys}
+			err := p2p.Send(p.rw, ReplyBatch, sd)
+			if err != nil {
+				log.Error("send batchkey to lower level nodes error")
+				fmt.Println(err)
+			}
 
-		// }
+		}
 
 		log.Info("handleMsg ----SetAddressMsg------end")
 

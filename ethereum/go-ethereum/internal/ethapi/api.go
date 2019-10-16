@@ -1259,6 +1259,7 @@ type SendTxArgs2 struct {
 	TxPeriod   uint32          `json:"txperiod"`
 	TxInterval uint32          `json:"txinterval"`
 	Ternimal   uint32          `json:"terminal"`
+	Cross      uint32          `json:"cross"`
 	Round      uint32          `json:"round"`
 	Speed      uint32          `json:"speed"`
 }
@@ -1460,6 +1461,124 @@ func (s *PublicTransactionPoolAPI) KeyCount(ctx context.Context) (uint32, error)
 	//return uint32(len(hibe.IDKey)), nil
 }
 
+func (s *PublicTransactionPoolAPI) SendTransaction4(ctx context.Context, args SendTxArgs2) (uint32, error) {
+	var signedTx []*types.Transaction
+	var signedTx_cross []*types.Transaction
+	var count uint32 = 0
+	var currentRound uint32 = 0
+	ms := 1000 / args.Speed
+	if len(hibe.IDKey) < int(args.Ternimal) {
+		fmt.Println("too many terminals")
+		return 0, nil
+	}
+	var dura float64 = 0
+	var dura_verify float64 = 0
+	var verifycount = 0
+	crosscout := args.Cross
+	var current_cross uint32 = 0
+	cross_id := args.ToID
+	for ; currentRound < args.Round; currentRound++ {
+		for id, key := range hibe.IDKey {
+			if err := args.setDefaults(ctx, s.b); err != nil {
+				return 0, err
+			}
+			args.FromID = id
+			args.FromIndex = 1
+			args.ToID = id
+			args.ToIndex = 1
+			if current_cross < crosscout {
+				args.ToID = cross_id
+			}
+
+			tx := args.toTransaction()
+
+			to := &DHibeAddress{args.ToID, args.ToIndex}
+			toAddress := to.Address()
+			tx.SetRecipient(toAddress)
+			from := &DHibeAddress{args.FromID, args.FromIndex}
+			fromAddress := from.Address()
+			tx.SetFromAddress(fromAddress)
+			tx.SetLevel(node.LocalLevel)
+			tx.SetNounce(uint64(currentRound))
+			if PID(args.ToID) == PID(node.ID) {
+				tx.SetTxType(types.TxDhibe)
+			} else {
+				tx.SetTxType(types.TxCrossChain)
+				tx.SetCrossAddress()
+			}
+			hibe.PrivateKey = key
+
+			start := time.Now()
+			types.DHibeSignTx(tx)
+			end := time.Now()
+			//		if hibe.Verify(hibe.MasterPubKey, idss, []byte("helloworld"), int(hibe.Level), sig)
+			start_verify := time.Now()
+			f := hibe.Verify(hibe.MasterPubKey, id, types.HibeHash(tx).Bytes(), int(hibe.Level), tx.GetDhibeSig().CompressedBytesToSig())
+			verifycount++
+			end_verify := time.Now()
+			dura_verify += end_verify.Sub(start_verify).Seconds()
+			if f == false {
+				continue
+
+			}
+			current_cross++
+			dura += end.Sub(start).Seconds()
+			if current_cross < crosscout {
+				signedTx_cross = append(signedTx, tx)
+			} else {
+				signedTx = append(signedTx, tx)
+			}
+
+			count++
+			if count >= args.Ternimal {
+				break
+			}
+		}
+
+		//start := time.Now()
+		//end := time.Now()
+		if node.ResultFile != nil {
+			wt := bufio.NewWriter(node.ResultFile)
+			str := fmt.Sprintf("ShadowSign  %.3f\n", dura/float64(count))
+			str_verify := fmt.Sprintf("Verify  %.3f\n", dura_verify/float64(verifycount))
+			s := str + str_verify
+			_, err := wt.WriteString(s)
+			if err != nil {
+				log.Error("write error")
+			}
+			wt.Flush()
+		}
+
+		var sent uint32 = 0
+		ratio := float32(len(signedTx_cross)) / float32(len(signedTx))
+		intracount := int(ratio * float32(args.Speed))
+		intercount := int(args.Speed) - intracount
+		intraindex := 0
+		interindex := 0
+		for sent < args.Ternimal {
+			for i := 0; i < intracount; i++ {
+				if i+intraindex >= len(signedTx_cross) {
+					break
+				}
+				s.b.SendBatch([]*types.Transaction{signedTx_cross[i+intraindex]})
+				time.Sleep(time.Duration(ms) * time.Millisecond)
+			}
+			for i := 0; i < intercount; i++ {
+				if i+interindex >= len(signedTx) {
+					break
+				}
+				s.b.SendBatch([]*types.Transaction{signedTx[i+interindex]})
+				time.Sleep(time.Duration(ms) * time.Millisecond)
+			}
+			intraindex += intracount
+			interindex += intercount
+			sent += uint32(intracount + intercount)
+		}
+
+	}
+	return uint32(len(signedTx)), nil
+
+}
 func (s *PublicTransactionPoolAPI) SendTransaction3(ctx context.Context, args SendTxArgs2) (uint32, error) {
 	var signedTx []*types.Transaction
 	var count uint32 = 0

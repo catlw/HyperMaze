@@ -466,6 +466,11 @@ web3._extend({
 			params: 1,
 		}),
 		new web3._extend.Method({
+			name: 'sendTransaction4',
+			call: 'eth_sendTransaction4',
+			params: 1,
+		}),
+		new web3._extend.Method({
 			name: 'keyCount',
 			call: 'eth_keyCount',
 		}),
