@@ -1493,7 +1493,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			id := data.Address
 			baseid := id[0 : len(id)-2]
 			var i uint16
-			for i = 1; i < 400; i++ {
+			for i = 1; i < 10; i++ {
 				var b1, b2 byte
 				b1 = byte(i >> 8)
 				b2 = byte(i)
@@ -1618,6 +1618,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 	case msg.Code == RootChainBlockHash:
 		log.Info("handleMsg ----RootChainBlockHash------")
+
 		var BlockHash common.Hash
 		if err := msg.Decode(&BlockHash); err != nil {
 			log.Error("Decode t error!!!")
@@ -1626,6 +1627,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 
 		if node.LocalLevel == node.TotalLevel-1 {
+			fmt.Println("storing rootchainblock hash", BlockHash.Hex())
 			db := pm.chaindb
 			db.Put(append(BlockHash.Bytes(), core.RootChainBlockHashSuffix...), BlockHash.Bytes())
 			return nil
@@ -1634,7 +1636,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		peers := pm.peers.PeersWithoutTx(BlockHash)
 		for _, peer := range peers {
 			if peer.peerFlag == p2p.LowLevelPeer {
-				//fmt.Println("send RootChainBlockHash to lower level")
+				fmt.Println("send RootChainBlockHash to lower level", BlockHash.Bytes())
 
 				p2p.Send(peer.rw, RootChainBlockHash, BlockHash)
 			}
