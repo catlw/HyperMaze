@@ -268,6 +268,9 @@ func (st *StateTransition) TransitionDb() (ret []byte, requiredGas, usedGas *big
 	if txCode == types.TxConvert {
 		st.state.SubBalance(msg.From(), big.NewInt(int64(msg.ZKValue())))
 	}
+	if txCode == types.TxRedeem {
+		st.state.AddBalance(msg.From(), big.NewInt(int64(msg.ZKValue())))
+	}
 	if txCode == types.TxWithdraw {
 		st.state.AddBalance(msg.From(), big.NewInt(int64(msg.ZKValue())))
 	}

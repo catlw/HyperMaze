@@ -1,72 +1,63 @@
 #include "utils.tcc"
 #include "note.tcc"
-#include "comparison.tcc"
-#include "less_cmp.tcc"
+#include "add_cmp.tcc"
 #include "commitment.tcc"
 
-/************************************************************************
+/***********************************************************
  * 模块整合，主要包括验证proof时所需要的publicData的输入
- ************************************************************************
- * sha256_two_block_gadget, sha256_three_block_gadget, Comparison_gadget
- ************************************************************************
+ ***********************************************************
+ * sha256_two_block_gadget, Add_gadget, Comparison_gadget
+ ***************************************************************
  * sha256(data+padding), 512bits < data.size() < 1024-64-1bits
- * **********************************************************************
+ * *************************************************************
  * publicData: cmt_A_old, sn_A_old,  
  * privateData: value_old, r_A_old
- * **********************************************************************
- * publicData: cmt_S, sn_A_old  
- * privateData: value_s, sn_s_new, r_s_new, pk_recv
- * **********************************************************************
- * auxiliary: value_s < value_old
- ************************************************************************
- * publicData: cmt_A 
- * privateData: sn_A, value, r_A
- * **********************************************************************/
+ * *************************************************************
+ * publicData: cmt_A_new, (value_s, balance)  
+ * privateData: value_new, sn_A_new, r_A_new
+ * *************************************************************
+ * auxiliary: value_new == value_old + value_s
+ *            value_s < balance
+ **********************************************************/
 template<typename FieldT>
-class send_gadget : public gadget<FieldT> {
+class convert_gadget : public gadget<FieldT> {
 public:
     // Verifier inputs 验证者输入
     pb_variable_array<FieldT> zk_packed_inputs; // 合并为十进制
     pb_variable_array<FieldT> zk_unpacked_inputs; // 拆分为二进制
     std::shared_ptr<multipacking_gadget<FieldT>> unpacker; // 二进制转十进制转换器
 
-    // cmtA_old = sha256(value_old, sn_old, r_old)
+    /************************************************************************
+     * std::shared_ptr<digest_variable<FieldT>> cmtA_old;  // this->cmtA_old
+     * std::shared_ptr<digest_variable<FieldT>> sn_old;    // this->sn_old
+     * std::shared_ptr<digest_variable<FieldT>> cmtA;      // this->cmtA
+     * pb_variable_array<FieldT> value_s;                  // this->value_s
+     * pb_variable_array<FieldT> balance_A;                // this->balance
+     * *********************************************************************/
+
+    pb_variable_array<FieldT> value;
     pb_variable_array<FieldT> value_old;
+    pb_variable_array<FieldT> value_s;
+    std::shared_ptr<digest_variable<FieldT>> r;
     std::shared_ptr<digest_variable<FieldT>> r_old;
+    std::shared_ptr<digest_variable<FieldT>> sn;
     std::shared_ptr<digest_variable<FieldT>> sn_old;
 
-    // cmtS = sha256(value_s, pk, sn_s, r_s, sn_old, padding)
-    pb_variable_array<FieldT> value_s;
-    std::shared_ptr<digest_variable<FieldT>> pk_recv; // a random 160bits receiver's address
-    std::shared_ptr<digest_variable<FieldT>> sn_s;    // 256bits serial number associsated with a balance transferred between two accounts
-    std::shared_ptr<digest_variable<FieldT>> r_s;     // 256bits random number
-
-    // cmtA = sha256(value, sn, r) && value = value_old - value_s
-    pb_variable_array<FieldT> value;
-    std::shared_ptr<digest_variable<FieldT>> sn;
-    std::shared_ptr<digest_variable<FieldT>> r;
-
-    // comparison_gadget
-    std::shared_ptr<note_gadget_with_comparison_for_value_old<FieldT>> lessCMP;
-
-    // note gadget and subtraction constraint
-    std::shared_ptr<note_gadget_with_packing_and_SUB<FieldT>> noteSUB;
+    std::shared_ptr<note_gadget_with_comparison_and_addition_for_balance<FieldT>> ncab;
 
     // old commitment with sha256_two_block_gadget
     std::shared_ptr<digest_variable<FieldT>> cmtA_old; // cm
     std::shared_ptr<sha256_two_block_gadget<FieldT>> commit_to_inputs_cmt_old; // note_commitment
 
-    // new commitment with sha256_three_block_gadget
-    std::shared_ptr<digest_variable<FieldT>> cmtS; // cm
-    std::shared_ptr<sha256_three_block_gadget<FieldT>> commit_to_input_cmt_s; // note_commitment
-
     // new commitment with sha256_two_block_gadget
     std::shared_ptr<digest_variable<FieldT>> cmtA; // cm
     std::shared_ptr<sha256_two_block_gadget<FieldT>> commit_to_inputs_cmt; // note_commitment
+    
+    // comparison_gadget inherited from note_gadget_with_comparison_and_addition_for_balance
 
     pb_variable<FieldT> ZERO;
 
-    send_gadget(
+    convert_gadget(
         protoboard<FieldT>& pb
     ) : gadget<FieldT>(pb) {
         // Verification
@@ -81,8 +72,9 @@ public:
 
             alloc_uint256(zk_unpacked_inputs, cmtA_old);
             alloc_uint256(zk_unpacked_inputs, sn_old);
-            alloc_uint256(zk_unpacked_inputs, cmtS);
             alloc_uint256(zk_unpacked_inputs, cmtA);
+
+            alloc_uint64(zk_unpacked_inputs, this->value_s); 
 
             assert(zk_unpacked_inputs.size() == verifying_input_bit_size()); // 判定输入长度
 
@@ -99,68 +91,42 @@ public:
 
         ZERO.allocate(this->pb, FMT(this->annotation_prefix, "zero"));
         
-        value_old.allocate(pb, 64);
-        r_old.reset(new digest_variable<FieldT>(pb, 256, "old random number"));
-        //cmtA_old.reset(new digest_variable<FieldT>(pb, 256, "cmtA_old"));
-
-        value_s.allocate(pb, 64);
-        pk_recv.reset(new digest_variable<FieldT>(pb, 160, "random address"));
-        sn_s.reset(new digest_variable<FieldT>(pb, 256, "serial number"));
-        r_s.reset(new digest_variable<FieldT>(pb, 256, "random number"));
-
+        //balance.allocate(pb, 64);
         value.allocate(pb, 64);
-        sn.reset(new digest_variable<FieldT>(pb, 256, "new serial number"));
-        r.reset(new digest_variable<FieldT>(pb, 256, "new random number"));
+        value_old.allocate(pb, 64);
+        //value_s.allocate(pb, 64);
+        r.reset(new digest_variable<FieldT>(pb, 256, "random number"));
+        r_old.reset(new digest_variable<FieldT>(pb, 256, "old random number"));
+        sn.reset(new digest_variable<FieldT>(pb, 256, "serial number"));
+        //sn_old.reset(new digest_variable<FieldT>(pb, 256, "old serial number"));
         
-        lessCMP.reset(new note_gadget_with_comparison_for_value_old<FieldT>(
+        ncab.reset(new note_gadget_with_comparison_and_addition_for_balance<FieldT>(
             pb,
-            value_old, 
-            sn_old, 
-            r_old, 
-            value_s, 
-            pk_recv, 
-            sn_s, 
-            r_s
-        ));
-
-        noteSUB.reset(new note_gadget_with_packing_and_SUB<FieldT>(
-            pb,
-            value_s, 
-            pk_recv,
-            sn_s,
-            r_s,
-            value_old, 
-            sn_old, 
+            value,
+            value_old,
+            value_s,
+            r,
             r_old,
-            value, 
             sn,
-            r
+            sn_old
         ));
+        // cmtA_old.reset(new digest_variable<FieldT>(pb, 256, "cmtA_old"));
 
         commit_to_inputs_cmt_old.reset(new sha256_two_block_gadget<FieldT>( 
             pb,
             ZERO,
-            value_old,      // 64bits value
+            value_old,      // 64bits value for convert
             sn_old->bits,   // 256bits serial number
             r_old->bits,    // 256bits random number
             cmtA_old
         ));
 
-        commit_to_input_cmt_s.reset(new sha256_three_block_gadget<FieldT>( 
-            pb,
-            ZERO,
-            value_s,       // 64bits value
-            pk_recv->bits,    // 160its random address
-            sn_s->bits,    // 256bits serial number
-            r_s->bits,     // 256bits random number
-            sn_old->bits,   // 256bits serial number
-            cmtS
-        ));
+        //cmtA.reset(new digest_variable<FieldT>(pb, 256, "cmtA"));
 
         commit_to_inputs_cmt.reset(new sha256_two_block_gadget<FieldT>( 
             pb,
             ZERO,
-            value,       // 64bits value
+            value,       // 64bits value for convert
             sn->bits,    // 256bits serial number
             r->bits,     // 256bits random number
             cmtA
@@ -172,9 +138,7 @@ public:
         // The true passed here ensures all the inputs are boolean constrained.
         unpacker->generate_r1cs_constraints(true);
 
-        lessCMP->generate_r1cs_constraints();
-
-        noteSUB->generate_r1cs_constraints();
+        ncab->generate_r1cs_constraints();
 
         // Constrain `ZERO`
         generate_r1cs_equals_const_constraint<FieldT>(this->pb, ZERO, FieldT::zero(), "ZERO");
@@ -182,35 +146,32 @@ public:
         // TODO: These constraints may not be necessary if SHA256
         // already boolean constrains its outputs.
         cmtA_old->generate_r1cs_constraints();
+
         commit_to_inputs_cmt_old->generate_r1cs_constraints();
 
-        cmtS->generate_r1cs_constraints();
-        commit_to_input_cmt_s->generate_r1cs_constraints();
-
         cmtA->generate_r1cs_constraints();
+
         commit_to_inputs_cmt->generate_r1cs_constraints();
     }
 
     // 证据函数，为commitment_with_add_and_less_gadget的变量生成证据
     void generate_r1cs_witness(
         const Note& note_old, 
-        const NoteS& note_s, 
-        const Note& note,
+        const Note& note, 
         uint256 cmtA_old_data,
-        uint256 cmtS_data,
-        uint256 cmtA_data
+        uint256 cmtA_data,
+        uint64_t v_s
     ) {
         //(const Note& note_old, const Note& note, uint64_t v_s, uint64_t b)
-        lessCMP->generate_r1cs_witness(note_old, note_s);
-
-        noteSUB->generate_r1cs_witness(note_s, note_old, note);
+        ncab->generate_r1cs_witness(note_old, note, v_s);
 
         // Witness `zero`
         this->pb.val(ZERO) = FieldT::zero();
 
         // Witness the commitment of the input note
         commit_to_inputs_cmt_old->generate_r1cs_witness();
-        commit_to_input_cmt_s->generate_r1cs_witness();
+
+        // Witness the commitment of the input note
         commit_to_inputs_cmt->generate_r1cs_witness();
 
         // [SANITY CHECK] Ensure the commitment is
@@ -219,10 +180,9 @@ public:
             this->pb,
             uint256_to_bool_vector(cmtA_old_data)
         );
-        cmtS->bits.fill_with_bits(
-            this->pb,
-            uint256_to_bool_vector(cmtS_data)
-        );
+
+        // [SANITY CHECK] Ensure the commitment is
+        // valid.
         cmtA->bits.fill_with_bits(
             this->pb,
             uint256_to_bool_vector(cmtA_data)
@@ -236,15 +196,16 @@ public:
     static r1cs_primary_input<FieldT> witness_map(
         const uint256& cmtA_old,
         const uint256& sn_old,
-        const uint256& cmtS,
-        const uint256& cmtA
+        const uint256& cmtA,
+        uint64_t value_s
     ) {
         std::vector<bool> verify_inputs;
 
         insert_uint256(verify_inputs, cmtA_old);
         insert_uint256(verify_inputs, sn_old);
-        insert_uint256(verify_inputs, cmtS);
         insert_uint256(verify_inputs, cmtA);
+
+        insert_uint64(verify_inputs, value_s);
 
         assert(verify_inputs.size() == verifying_input_bit_size());
         auto verify_field_elements = pack_bit_vector_into_field_element_vector<FieldT>(verify_inputs);
@@ -258,8 +219,9 @@ public:
 
         acc += 256; // cmtA_old
         acc += 256; // sn_old
-        acc += 256; // cmtS
         acc += 256; // cmtA
+        
+        acc += 64; // value_s
 
         return acc;
     }

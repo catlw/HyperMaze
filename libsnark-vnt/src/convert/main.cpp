@@ -23,7 +23,7 @@ using namespace std;
 
 // 生成proof
 template<typename ppzksnark_ppT>
-boost::optional<r1cs_ppzksnark_proof<ppzksnark_ppT>> generate_mint_proof(r1cs_ppzksnark_proving_key<ppzksnark_ppT> proving_key,
+boost::optional<r1cs_ppzksnark_proof<ppzksnark_ppT>> generate_convert_proof(r1cs_ppzksnark_proving_key<ppzksnark_ppT> proving_key,
                                                                     const Note& note_old,
                                                                     const Note& note,
                                                                     uint256 cmtA_old,
@@ -34,7 +34,7 @@ boost::optional<r1cs_ppzksnark_proof<ppzksnark_ppT>> generate_mint_proof(r1cs_pp
     typedef Fr<ppzksnark_ppT> FieldT;
 
     protoboard<FieldT> pb;  // 定义原始模型，该模型包含constraint_system成员变量
-    mint_gadget<FieldT> g(pb); // 构造新模型
+    convert_gadget<FieldT> g(pb); // 构造新模型
     g.generate_r1cs_constraints(); // 生成约束
 
     g.generate_r1cs_witness(note_old, note, cmtA_old, cmtA, value_s); // 为新模型的参数生成证明
@@ -51,7 +51,7 @@ boost::optional<r1cs_ppzksnark_proof<ppzksnark_ppT>> generate_mint_proof(r1cs_pp
 
 // 验证proof
 template<typename ppzksnark_ppT>
-bool verify_mint_proof(r1cs_ppzksnark_verification_key<ppzksnark_ppT> verification_key,
+bool verify_convert_proof(r1cs_ppzksnark_verification_key<ppzksnark_ppT> verification_key,
                     r1cs_ppzksnark_proof<ppzksnark_ppT> proof,
                     const uint256& cmtA_old,
                     const uint256& sn_old,
@@ -61,7 +61,7 @@ bool verify_mint_proof(r1cs_ppzksnark_verification_key<ppzksnark_ppT> verificati
 {
     typedef Fr<ppzksnark_ppT> FieldT;
 
-    const r1cs_primary_input<FieldT> input = mint_gadget<FieldT>::witness_map(
+    const r1cs_primary_input<FieldT> input = convert_gadget<FieldT>::witness_map(
         cmtA_old,
         sn_old,
         cmtA,
@@ -77,7 +77,7 @@ void PrintProof(r1cs_ppzksnark_proof<ppzksnark_ppT> proof)
 {
     printf("================== Print proof ==================================\n");
     //printf("proof is %x\n", *proof);
-    std::cout << "mint proof:\n";
+    std::cout << "convert proof:\n";
 
     std::cout << "\n knowledge_commitment<G1<ppT>, G1<ppT> > g_A: ";
     std::cout << "\n   knowledge_commitment.g: \n     " << proof.g_A.g;
@@ -98,7 +98,7 @@ void PrintProof(r1cs_ppzksnark_proof<ppzksnark_ppT> proof)
 }
 
 template<typename ppzksnark_ppT> //--Agzs
-bool test_mint_gadget_with_instance(
+bool test_convert_gadget_with_instance(
                             uint64_t value,
                             uint64_t value_old,
                             //uint256 sn_old,
@@ -133,8 +133,8 @@ bool test_mint_gadget_with_instance(
 
     // protoboard<FieldT> pb;
 
-    // mint_gadget<FieldT> mint(pb);
-    // mint.generate_r1cs_constraints();// 生成约束
+    // convert_gadget<FieldT> convert(pb);
+    // convert.generate_r1cs_constraints();// 生成约束
 
     // // check conatraints
     // const r1cs_constraint_system<FieldT> constraint_system = pb.get_constraint_system();
@@ -147,10 +147,10 @@ bool test_mint_gadget_with_instance(
     cout << "Trying to generate proof..." << endl;
 
     struct timeval gen_start, gen_end;
-    double mintTimeUse;
+    double convertTimeUse;
     gettimeofday(&gen_start,NULL);
 
-    auto proof = generate_mint_proof<default_r1cs_ppzksnark_pp>(keypair.pk, 
+    auto proof = generate_convert_proof<default_r1cs_ppzksnark_pp>(keypair.pk, 
                                                             note_old,
                                                             note,
                                                             cmtA_old,
@@ -159,17 +159,17 @@ bool test_mint_gadget_with_instance(
                                                             );
 
     gettimeofday(&gen_end, NULL);
-    mintTimeUse = gen_end.tv_sec - gen_start.tv_sec + (gen_end.tv_usec - gen_start.tv_usec)/1000000.0;
-    printf("\n\nGen Mint Proof Use Time:%fs\n\n", mintTimeUse);
+    convertTimeUse = gen_end.tv_sec - gen_start.tv_sec + (gen_end.tv_usec - gen_start.tv_usec)/1000000.0;
+    printf("\n\nGen convert Proof Use Time:%fs\n\n", convertTimeUse);
 
     // verify proof
     if (!proof) {
-        printf("generate mint proof fail!!!\n");
+        printf("generate convert proof fail!!!\n");
         return false;
     } else {
         //PrintProof(*proof);
 
-        //assert(verify_mint_proof(keypair.vk, *proof));
+        //assert(verify_convert_proof(keypair.vk, *proof));
         // wrong test data
         uint256 wrong_sn_old = uint256S("666");//random_uint256();
         uint64_t wrong_value_s = uint64_t(100);
@@ -177,10 +177,10 @@ bool test_mint_gadget_with_instance(
         uint256 wrong_cmtA = note_old.cm();        
 
         struct timeval ver_start, ver_end;
-        double mintVerTimeUse;
+        double convertVerTimeUse;
         gettimeofday(&ver_start, NULL);
 
-        bool result = verify_mint_proof(keypair.vk, 
+        bool result = verify_convert_proof(keypair.vk, 
                                    *proof, 
                                    cmtA_old,
                                    sn_old,
@@ -189,14 +189,14 @@ bool test_mint_gadget_with_instance(
                                    );
 
         gettimeofday(&ver_end, NULL);
-        mintVerTimeUse = ver_end.tv_sec - ver_start.tv_sec + (ver_end.tv_usec - ver_start.tv_usec)/1000000.0;
-        printf("\n\nVer Mint Proof Use Time:%fs\n\n", mintVerTimeUse);
+        convertVerTimeUse = ver_end.tv_sec - ver_start.tv_sec + (ver_end.tv_usec - ver_start.tv_usec)/1000000.0;
+        printf("\n\nVer convert Proof Use Time:%fs\n\n", convertVerTimeUse);
         //printf("verify result = %d\n", result);
          
         if (!result){
-            cout << "Verifying mint proof unsuccessfully!!!" << endl;
+            cout << "Verifying convert proof unsuccessfully!!!" << endl;
         } else {
-            cout << "Verifying mint proof successfully!!!" << endl;
+            cout << "Verifying convert proof successfully!!!" << endl;
         }
         
         return result;
@@ -211,8 +211,8 @@ r1cs_ppzksnark_keypair<ppzksnark_ppT> Setup() {
 
     protoboard<FieldT> pb;
 
-    mint_gadget<FieldT> mint(pb);
-    mint.generate_r1cs_constraints();// 生成约束
+    convert_gadget<FieldT> convert(pb);
+    convert.generate_r1cs_constraints();// 生成约束
 
     // check conatraints
     const r1cs_constraint_system<FieldT> constraint_system = pb.get_constraint_system();
@@ -234,18 +234,18 @@ int main () {
 
     gettimeofday(&t2,NULL);
     timeuse = t2.tv_sec - t1.tv_sec + (t2.tv_usec - t1.tv_usec)/1000000.0;
-    printf("\n\nMint Use Time:%fs\n\n",timeuse);
+    printf("\n\nconvert Use Time:%fs\n\n",timeuse);
     //test_r1cs_gg_ppzksnark<dsefault_r1cs_gg_ppzksnark_pp>(1000, 100);
    
     //r1cs_ppzksnark_keypair<default_r1cs_ppzksnark_pp> keypair = Setup<default_r1cs_ppzksnark_pp>();
 
-    libff::print_header("#             testing mint gadget");
+    libff::print_header("#             testing convert gadget");
 
     uint64_t value = uint64_t(13); 
     uint64_t value_old = uint64_t(6); 
     uint64_t value_s = uint64_t(7);
 
-    test_mint_gadget_with_instance<default_r1cs_ppzksnark_pp>(value, value_old, value_s, keypair);
+    test_convert_gadget_with_instance<default_r1cs_ppzksnark_pp>(value, value_old, value_s, keypair);
 
     // Note. cmake can not compile the assert()  --Agzs
     

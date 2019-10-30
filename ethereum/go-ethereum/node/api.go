@@ -70,7 +70,9 @@ var End time.Time
 
 var KeyRequestTime time.Time
 var KeyGenerateTime time.Time
-var KeyStatus = make(chan bool, 10)
+
+var NewHeaderTime time.Time
+var KeyStat = false
 var KeyCount uint32
 
 type MN struct { //ADD BY LIUWEI
@@ -208,12 +210,7 @@ func (api *PrivateAdminAPI) ID() (string, error) {
 	return ID, nil
 }
 func (api *PrivateAdminAPI) KeyStatus() (bool, error) {
-	select {
-	case b := <-KeyStatus:
-		return b, nil
-	default:
-		return false, nil
-	}
+	return KeyStat, nil
 
 }
 

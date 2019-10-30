@@ -403,10 +403,10 @@ func WriteBlock(db ethdb.Database, block *types.Block) error {
 	if err := WriteHeader(db, block.Header()); err != nil {
 		return err
 	}
-	fmt.Println("write zkfunds: ", block.Number().Uint64())
-	if err := WriteZKfund(db, block.Header().ZKFunds, block.NumberU64()); err != nil {
-		return err
-	}
+	// fmt.Println("write zkfunds: ", block.Number().Uint64())
+	// if err := WriteZKfund(db, block.Header().ZKFunds, block.NumberU64()); err != nil {
+	// 	return err
+	// }
 	return nil
 }
 

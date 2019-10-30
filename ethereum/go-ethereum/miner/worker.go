@@ -129,6 +129,7 @@ type worker struct {
 	mining int32
 	atWork int32
 
+	addressIndex   uint32
 	fullValidation bool
 }
 
@@ -170,7 +171,8 @@ func (self *worker) addHeader(hash *common.Hash) *types.Transaction {
 	} else {
 		self.headers = append(self.headers, hash)
 		if len(self.headers) == HEADS {
-			hibeaddr := &ethapi.DHibeAddress{node.ID, 0}
+			hibeaddr := &ethapi.DHibeAddress{node.ID, self.addressIndex}
+			self.addressIndex += 1
 			address := hibeaddr.Address()
 			db := self.chainDb
 			var nonce uint64
@@ -182,9 +184,19 @@ func (self *worker) addHeader(hash *common.Hash) *types.Transaction {
 				if err = rlp.Decode(reader, &nonce); err != nil {
 					return nil
 				}
-				nonce += 1
+
 			}
+
+			node.NewHeaderTime = time.Now()
 			tx = types.NewHeaderTransaction(nonce, self.headers, &address, node.LocalLevel)
+			nonce += 1
+			nonceBytes, err = rlp.EncodeToBytes(nonce)
+			if err != nil {
+				fmt.Println("EncodeToBytes(nonce) error")
+			}
+
+			db.Put(append(address.Bytes(), core.AddressNonceSuffix...), nonceBytes)
+
 			types.DHibeSignTx(tx)
 			//fmt.Println(tx)
 			//	sig := hibe.Sign(hibe.PrivateKey, hibe.MasterPubKey, types.HibeHash(tx).Bytes(), hibe.Random)
@@ -285,7 +297,7 @@ func (self *worker) update() {
 		switch ev := event.Data.(type) {
 		case core.ChainHeadEvent:
 			log.Info("-----------ChainHeadEvent is called!!!")
-			time.Sleep(1 * time.Second)
+			time.Sleep(10 * time.Millisecond)
 			self.commitNewWork()
 		case core.ChainSideEvent:
 			self.uncleMu.Lock()
@@ -357,8 +369,10 @@ func (self *worker) wait() {
 				if node.ID != node.ROOTID {
 					//if true {
 					header := block.Hash()
+					fmt.Println("generating new header", header.Hex())
 					tx := self.addHeader(&header)
 					if tx != nil {
+						fmt.Println("generated new header", header.Hex())
 						go self.mux.Post(core.HeaderTxEvent{Tx: tx})
 					}
 				}
@@ -580,6 +594,15 @@ func (self *worker) commitNewWork() {
 	txs := types.NewTransactionsByPriceAndNonce(pending)
 	work.commitTransactions(self.mux, txs, self.chain, self.coinbase)
 
+	if node.ResultFile != nil {
+		wt := bufio.NewWriter(node.ResultFile)
+		str := fmt.Sprintf(" block %d  after prepare time is :%v:\n", header.Number, time.Now())
+		_, err := wt.WriteString(str)
+		if err != nil {
+			log.Error("write error")
+		}
+		wt.Flush()
+	}
 	self.eth.TxPool().RemoveBatch(work.failedTxs)
 
 	// compute uncles for the new block.

@@ -95,7 +95,7 @@ func proofUsed(proof []byte) bool {
 
 func VerifyProof(proof [][]byte, db ethdb.Database) bool {
 	var err error
-	var block types.Block
+
 	var blockhash common.Hash
 	if len(proof) < 2 {
 		return false
@@ -135,26 +135,35 @@ func VerifyProof(proof [][]byte, db ethdb.Database) bool {
 	}
 
 	blockhash = block1.Hash()
-loop:
+
 	for i := 2; i < len(proof); i++ {
+		var block types.Block
 		stream = rlp.NewStream(bytes.NewReader(proof[i][:]), 0)
 		err = stream.Decode(&block)
 		if err != nil {
 			fmt.Println("decode block err", err)
 			return false
 		}
+		fmt.Println("proof decode", i, block.Hash().Hex())
+
 		txs = block.Transactions()
+		find := false
 		for _, t := range txs {
 			if checkHeaderExist(t, blockhash) == true {
 				blockhash = block.Hash()
-				break loop
+				find = true
+				break
 			}
 		}
-		fmt.Println("block %v does not have header %v", i, blockhash)
+		if find == true {
+			continue
+		}
+		fmt.Println("block %d does not have header %s", i, blockhash.Hex())
 		return false
 	}
 
 	if ValidateProofRoot(blockhash.Bytes(), db) == false {
+		fmt.Println(blockhash.Hex())
 		fmt.Println("proof root hash invalid")
 		return false
 	}
@@ -561,6 +570,8 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	}
 	// Ensure the transaction doesn't exceed the current block limit gas.
 	if pool.gasLimit().Cmp(tx.Gas()) < 0 {
+
+		fmt.Println("gas limit error", pool.gasLimit(), tx.Gas())
 		return ErrGasLimit
 	}
 	var signer types.Signer
@@ -595,6 +606,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	// Transactor should have enough funds to cover the costs
 	// cost == V + GP * GL
 	if currentState.GetBalance(from).Cmp(tx.Cost()) < 0 {
+		fmt.Println("ErrInsufficientFunds", currentState.GetBalance(from), tx.Cost())
 		return ErrInsufficientFunds
 	}
 
@@ -645,7 +657,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 	// If the transaction fails basic validation, discard it
 	if err := pool.validateTx(tx, local); err != nil {
 		log.Trace("Discarding invalid transaction", "hash", hash, "err", err)
-		fmt.Println("\nDiscarding invalid transaction:%x", hash, err) ////xiaobei 2.5
+		fmt.Println("Discarding invalid transaction", hash.Hex(), err) ////xiaobei 2.5
 		invalidTxCounter.Inc(1)
 		return false, err
 	}
@@ -664,7 +676,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 		drop := pool.priced.Discard(len(pool.all)-int(pool.config.GlobalSlots+pool.config.GlobalQueue-1), pool.locals)
 		fmt.Printf("----New transaction is better than our worse ones")
 		for _, tx := range drop {
-			fmt.Printf("\nDiscarding freshly underpriced transaction:%x", hash) ////xiaobei 2.5
+			fmt.Printf("\nDiscarding freshly underpriced transaction:%s \n", hash.Hex()) ////xiaobei 2.5
 			log.Trace("Discarding freshly underpriced transaction", "hash", tx.Hash(), "price", tx.GasPrice())
 			underpricedTxCounter.Inc(1)
 			pool.removeTx(tx.Hash())

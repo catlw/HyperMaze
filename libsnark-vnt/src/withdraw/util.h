@@ -3,8 +3,6 @@
 #include <vector>
 #include <cstdint>
 
-//#include "crypto/sha256.h"
-
 #include <iostream>
 #include <fstream>
 #include <exception>
@@ -228,7 +226,3 @@ std::vector<unsigned char> vectorSlice(const std::vector<unsigned char>& vec, si
     }
     return slice;
 }
-
-
-
-

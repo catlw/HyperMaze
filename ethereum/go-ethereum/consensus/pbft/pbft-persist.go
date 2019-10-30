@@ -114,7 +114,7 @@ func (instance *pbftCore) restorePQSet(key string) []*types.ViewChange_PQ {
 //=> overwrite persistRequestBlock. --Agzs
 func (instance *pbftCore) persistRequestBlock(digest string) {
 	reqBock := instance.blockStore[digest]
-	logger.Infof("persistRequestBlock(digest string)---reqBock is %+v,digest is %x", reqBock, digest) ////test--xiaobei 11.20
+	//logger.Infof("persistRequestBlock(digest string)---reqBock is %+v,digest is %x", reqBock, digest) ////test--xiaobei 11.20
 	//reqBlockPacked, err := json.Marshal(reqBock)
 	reqBlockPacked, err := reqBock.MarshalJSON() ////--xiaobei 11.22
 	//test, err := json.Marshal(reqBock.Hheader)

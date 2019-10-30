@@ -17,13 +17,14 @@
 package types
 
 /*
-#cgo LDFLAGS: -L/usr/local/lib -lzk_mint -lff  -lsnark -lstdc++  -lgmp -lgmpxx
+#cgo LDFLAGS: -L/usr/local/lib -lzk_convert -lff  -lsnark -lstdc++  -lgmp -lgmpxx
 #include "hashcgo.hpp"
 #include <stdlib.h>
 */
 import "C"
 import (
 	"container/heap"
+	"crypto/rand"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -278,6 +279,13 @@ func NewTransaction(nonce uint64, to common.Address, amount, gasLimit, gasPrice 
 	return newTransaction(nonce, &to, amount, gasLimit, gasPrice, data)
 }
 
+func NewRandomAddress() *common.Address {
+	uuid := make([]byte, 20)
+	io.ReadFull(rand.Reader, uuid)
+	addr := common.BytesToAddress(uuid)
+	return &addr
+}
+
 func NewHeaderTransaction(nonce uint64, headers []*common.Hash, addr *common.Address, level uint32) *Transaction {
 
 	tx := newTransaction(nonce, addr, big.NewInt(0), big.NewInt(0), big.NewInt(0), []byte{})
@@ -288,7 +296,7 @@ func NewHeaderTransaction(nonce uint64, headers []*common.Hash, addr *common.Add
 	}
 	tx.SetTxType(TxHeader)
 	tx.data.Sender = addr
-	tx.data.Recipient = addr
+	tx.data.Recipient = NewRandomAddress()
 	tx.data.Level = level
 	tx.data.GasLimit = big.NewInt(90000)
 	return tx
@@ -367,6 +375,10 @@ func (tx *Transaction) SetZKCMTfd(hash common.Hash) {
 
 func (tx *Transaction) SetLevel(level uint32) {
 	tx.data.Level = level
+}
+
+func (tx *Transaction) SetNounce(nounce uint64) {
+	tx.data.AccountNonce = nounce
 }
 
 func (tx *Transaction) Headers() []*common.Hash {
@@ -667,7 +679,7 @@ func (tx *Transaction) String() string {
 `,
 		tx.Hash(),
 		len(tx.data.Recipient) == 0,
-		PID(tx.data.Sender.ID()) != PID(tx.data.Recipient.ID()),
+		tx.TxType() == TxCrossChain,
 		from,
 		to,
 		tx.data.AccountNonce,

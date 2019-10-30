@@ -42,10 +42,10 @@ int main(){
     alt_bn128_pp::init_public_params();
     typedef libff::Fr<alt_bn128_pp> FieldT;
     protoboard<FieldT> pb;
-    mint_gadget<FieldT> mint(pb);
-    mint.generate_r1cs_constraints();// 生成约束
+    convert_gadget<FieldT> convert(pb);
+    convert.generate_r1cs_constraints();// 生成约束
     const r1cs_constraint_system<FieldT> constraint_system = pb.get_constraint_system();
     r1cs_ppzksnark_keypair<alt_bn128_pp> keypair = r1cs_ppzksnark_generator<alt_bn128_pp>(constraint_system);
-    serializeProvingKeyToFile(keypair.pk,"mintpk.txt");
-    vkToFile(keypair.vk,"mintvk.txt");
+    serializeProvingKeyToFile(keypair.pk,"convertpk.txt");
+    vkToFile(keypair.vk,"convertvk.txt");
 }

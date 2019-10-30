@@ -6,23 +6,19 @@
 #include <boost/optional.hpp>
 #include <boost/foreach.hpp>
 #include <boost/format.hpp>
-#include <boost/array.hpp>
 
 #include "libsnark/zk_proof_systems/ppzksnark/r1cs_ppzksnark/r1cs_ppzksnark.hpp"
 #include "libsnark/common/default_types/r1cs_ppzksnark_pp.hpp"
 #include <libsnark/gadgetlib1/gadgets/hashes/sha256/sha256_gadget.hpp>
 #include "libff/algebra/curves/alt_bn128/alt_bn128_pp.hpp"
-#include "libsnark/gadgetlib1/gadgets/merkle_tree/merkle_tree_check_read_gadget.hpp"
 
 #include "Note.h"
 #include "uint256.h"
 #include "depositcgo.hpp"
-#include "IncrementalMerkleTree.hpp"
 
 using namespace libsnark;
 using namespace libff;
 using namespace std;
-using namespace libvnt;
 
 #include "circuit/gadget.tcc"
 
@@ -200,22 +196,20 @@ std::string string_proof_as_hex(libsnark::r1cs_ppzksnark_proof<libff::alt_bn128_
 
 template <typename ppzksnark_ppT>
 r1cs_ppzksnark_proof<ppzksnark_ppT> generate_deposit_proof(r1cs_ppzksnark_proving_key<ppzksnark_ppT> proving_key,
-                                                           const NoteS &note_s,
-                                                           const Note &note_old,
-                                                           const Note &note,
-                                                           uint256 cmtS,
-                                                           uint256 cmtB_old,
-                                                           uint256 cmtB,
-                                                           const uint256 &rt,
-                                                           const MerklePath &path)
+                                                        Note &note_old,
+                                                        NoteS &notes,
+                                                        Note& note,
+                                                        uint256 cmtA_old,
+                                                        uint256 cmtS,
+                                                        uint256 cmtA)
 {
     typedef Fr<ppzksnark_ppT> FieldT;
 
-    protoboard<FieldT> pb;               // 定义原始模型，该模型包含constraint_system成员变量
-    deposit_gadget<FieldT> deposit(pb);  // 构造新模型
-    deposit.generate_r1cs_constraints(); // 生成约束
+    protoboard<FieldT> pb;         // 定义原始模型，该模型包含constraint_system成员变量
+    deposit_gadget<FieldT> g(pb);     // 构造新模型
+    g.generate_r1cs_constraints(); // 生成约束
 
-    deposit.generate_r1cs_witness(note_s, note_old, note, cmtS, cmtB_old, cmtB, rt, path); // 为新模型的参数生成证明
+    g.generate_r1cs_witness(note_old, notes, note, cmtA_old, cmtS, cmtA); // 为新模型的参数生成证明
 
     if (!pb.is_satisfied())
     { // 三元组R1CS是否满足  < A , X > * < B , X > = < C , X >
@@ -231,28 +225,24 @@ r1cs_ppzksnark_proof<ppzksnark_ppT> generate_deposit_proof(r1cs_ppzksnark_provin
 // 验证proof
 template <typename ppzksnark_ppT>
 bool verify_deposit_proof(r1cs_ppzksnark_verification_key<ppzksnark_ppT> verification_key,
-                          r1cs_ppzksnark_proof<ppzksnark_ppT> proof,
-                          // const uint256& merkle_root,
-                          const uint256 &rt,
-                          const uint160 &pk_recv,
-                          const uint256 &cmtB_old,
-                          const uint256 &sn_old,
-                          const uint256 &cmtB)
+                  r1cs_ppzksnark_proof<ppzksnark_ppT> proof,
+                  uint256 &cmtA_old,
+                  uint256 &sn_old,
+                  uint256 &cmtS,
+                  uint256 &cmtA)
 {
     typedef Fr<ppzksnark_ppT> FieldT;
 
     const r1cs_primary_input<FieldT> input = deposit_gadget<FieldT>::witness_map(
-        rt,
-        pk_recv,
-        cmtB_old,
+        cmtA_old,
         sn_old,
-        cmtB);
+        cmtS,
+        cmtA);
 
     // 调用libsnark库中验证proof的函数
     return r1cs_ppzksnark_verifier_strong_IC<ppzksnark_ppT>(verification_key, input, proof);
 }
 
-//func GenCMT(value uint64, sn []byte, r []byte)
 char *genCMT(uint64_t value, char *sn_string, char *r_string)
 {
     uint256 sn = uint256S(sn_string);
@@ -260,23 +250,25 @@ char *genCMT(uint64_t value, char *sn_string, char *r_string)
     Note note = Note(value, sn, r);
     uint256 cmtA = note.cm();
     std::string cmtA_c = cmtA.ToString();
+
     char *p = new char[67]; //必须使用new开辟空间 不然cgo调用该函数结束全为0
     cmtA_c.copy(p, 66, 0);
-    *(p + 66) = '\0'; //手动加结束符
+    *(p + 67) = '\0'; //手动加结束符
 
     return p;
 }
 
-char *genCMTS(uint64_t value_s, char *pk_string, char *sn_s_string, char *r_s_string, char *sn_old_string)
+char *genCMTS(uint64_t value_s, char *id_string, char *sn_s_string, char *r_s_string, char *sn_old_string)
 {
-    uint160 pk = uint160S(pk_string);
+    uint160 id = uint160S(id_string);
     uint256 sn_s = uint256S(sn_s_string);
     uint256 r_s = uint256S(r_s_string);
     uint256 sn = uint256S(sn_old_string);
-    NoteS notes = NoteS(value_s, pk, sn_s, r_s, sn);
+    NoteS notes = NoteS(value_s, id, sn_s, r_s, sn);
     uint256 cmtS = notes.cm();
 
     std::string cmtS_c = cmtS.ToString();
+
     char *p = new char[67]; //必须使用new开辟空间 不然cgo调用该函数结束全为0
     cmtS_c.copy(p, 66, 0);
     *(p + 66) = '\0'; //手动加结束符
@@ -284,106 +276,37 @@ char *genCMTS(uint64_t value_s, char *pk_string, char *sn_s_string, char *r_s_st
     return p;
 }
 
-char *genRoot(char *cmtarray, int n)
+char *genDepositproof(uint64_t value_A,
+                   char *sn_s_string,
+                   char *r_s_string,
+                   char *sn_string,
+                   char *r_string,
+                   char *cmt_s_string,
+                   char *cmtA_string,
+                   uint64_t value_s,
+                   char *pk_string,
+                   uint64_t value_A_new,
+                   char *sn_A_new,
+                   char *r_A_new,
+                   char *cmt_A_new)
 {
-    boost::array<uint256, 256> commitments; //256个cmts
-
-    string s = cmtarray;
-
-    ZCIncrementalMerkleTree tree;
-    assert(tree.root() == ZCIncrementalMerkleTree::empty_root());
-
-    for (int i = 0; i < n; i++)
-    {
-        commitments[i] = uint256S(s.substr(i * 66, 66)); //分割cmtarray  0x+64个十六进制数 一共64字节
-        tree.append(commitments[i]);
-    }
-
-    uint256 rt = tree.root();
-    std::string rt_c = rt.ToString();
-
-    char *p = new char[65]; //必须使用new开辟空间 不然cgo调用该函数结束全为0   65
-    rt_c.copy(p, 64, 0);
-    *(p + 64) = '\0'; //手动加结束符
-
-    return p;
-}
-
-char *genDepositproof(uint64_t value,
-                      uint64_t value_old,
-                      char *sn_old_string,
-                      char *r_old_string,
-                      char *sn_string,
-                      char *r_string,
-                      char *sns_string,
-                      char *rs_string,
-                      char *cmtB_old_string,
-                      char *cmtB_string,
-                      uint64_t value_s,
-                      char *pk_string,
-                      char *sn_A_oldstring,
-                      char *cmtS_string,
-                      char *cmtarray,
-                      int n,
-                      char *RT)
-{
-    uint256 sn_old = uint256S(sn_old_string);
-    uint256 r_old = uint256S(r_old_string);
+    //从字符串转uint256
+    uint256 sn_s = uint256S(sn_s_string);
+    uint256 r_s = uint256S(r_s_string);
     uint256 sn = uint256S(sn_string);
     uint256 r = uint256S(r_string);
-    uint256 sn_s = uint256S(sns_string);
-    uint256 r_s = uint256S(rs_string);
-    uint256 cmtB_old = uint256S(cmtB_old_string);
-    uint256 cmtB = uint256S(cmtB_string);
-    uint160 pk_recv = uint160S(pk_string);
-    uint256 sn_A_old = uint256S(sn_A_oldstring);
-    uint256 cmtS = uint256S(cmtS_string);
+    uint256 cmtS = uint256S(cmt_s_string); //--zy
+    uint256 cmtA = uint256S(cmtA_string);
+    uint160 pk = uint160S(pk_string);
+    uint256 snAnew = uint256S(sn_A_new);
+    uint256 rAnew = uint256S(r_A_new);
+    uint256 cmtAnew = uint256S(cmt_A_new);
 
-    Note note_old = Note(value_old, sn_old, r_old);
 
-    NoteS note_s = NoteS(value_s, pk_recv, sn_s, r_s, sn_A_old);
-
-    Note note = Note(value, sn, r);
-
-    boost::array<uint256, 256> commitments; //256个cmts
-    string sss = cmtarray;
-
-    for (int i = 0; i < n; i++)
-    {
-        commitments[i] = uint256S(sss.substr(i * 66, 66)); //分割cmtarray  0x+64个十六进制数 一共66位
-    }
-
-    ZCIncrementalMerkleTree tree;
-    assert(tree.root() == ZCIncrementalMerkleTree::empty_root());
-
-    ZCIncrementalWitness wit = tree.witness(); //初始化witness
-    bool find_cmtS = false;
-    for (size_t i = 0; i < n; i++)
-    {
-        if (find_cmtS)
-        {
-            wit.append(commitments[i]);
-        }
-        else
-        {
-            /********************************************
-             * 如果删除else分支，
-             * 将tree.append(commitments[i])放到for循环体中，
-             * 最终得到的rt == wit.root() == tree.root()
-             *********************************************/
-            tree.append(commitments[i]);
-        }
-
-        if (commitments[i] == cmtS)
-        {
-            //在要证明的叶子节点添加到tree后，才算真正初始化wit，下面的root和path才会正确。
-            wit = tree.witness();
-            find_cmtS = true;
-        }
-    }
-
-    auto path = wit.path();
-    uint256 rt = wit.root();
+    //计算sha256
+    Note note_old = Note(value_A, sn, r);
+    NoteS notes = NoteS(value_s, pk, sn_s, r_s, sn);
+    Note note_new = Note(value_A_new, snAnew, rAnew);
 
     //初始化参数
     alt_bn128_pp::init_public_params();
@@ -394,7 +317,7 @@ char *genDepositproof(uint64_t value,
 
     r1cs_ppzksnark_keypair<alt_bn128_pp> keypair;
     //cout << "Trying to read deposit proving key file..." << endl;
-    //cout << "Please be patient as this may take about 64 seconds. " << endl;
+    //cout << "Please be patient as this may take about 25 seconds. " << endl;
     keypair.pk = deserializeProvingKeyFromFile("/usr/local/prfKey/depositpk.txt");
 
     gettimeofday(&t2,NULL);
@@ -404,15 +327,7 @@ char *genDepositproof(uint64_t value,
     // 生成proof
     cout << "Trying to generate deposit proof..." << endl;
 
-    libsnark::r1cs_ppzksnark_proof<libff::alt_bn128_pp> proof = generate_deposit_proof<alt_bn128_pp>(keypair.pk,
-                                                                                                     note_s,
-                                                                                                     note_old,
-                                                                                                     note,
-                                                                                                     cmtS,
-                                                                                                     cmtB_old,
-                                                                                                     cmtB,
-                                                                                                     rt,
-                                                                                                     path);
+    libsnark::r1cs_ppzksnark_proof<libff::alt_bn128_pp> proof = generate_deposit_proof<alt_bn128_pp>(keypair.pk, note_old, notes, note_new, cmtA, cmtS , cmtAnew);
 
     //proof转字符串
     std::string proof_string = string_proof_as_hex(proof);
@@ -424,16 +339,15 @@ char *genDepositproof(uint64_t value,
     return p;
 }
 
-bool verifyDepositproof(char *data, char *RT, char *pk, char *cmtb_old, char *snold, char *cmtb)
+bool verifyDepositproof(char *data, char *cmtA_old_string, char *sn_old_string, char *cmtS_string ,char *cmtA_new_string)
 {
-    uint256 rt = uint256S(RT);
-    uint160 pk_recv = uint160S(pk);
-    uint256 cmtB_old = uint256S(cmtb_old);
-    uint256 sn_old = uint256S(snold);
-    uint256 cmtB = uint256S(cmtb);
+    uint256 sn_old = uint256S(sn_old_string);
+    uint256 cmtS = uint256S(cmtS_string);
+    uint256 cmtA_old = uint256S(cmtA_old_string);
+    uint256 cmtA_new = uint256S(cmtA_new_string);
 
     alt_bn128_pp::init_public_params();
-
+    
     struct timeval t1, t2;
     double timeuse;
     gettimeofday(&t1,NULL);
@@ -446,7 +360,7 @@ bool verifyDepositproof(char *data, char *RT, char *pk, char *cmtb_old, char *sn
     // printf("\n\n reading deposit vk Use Time:%fs\n\n",timeuse);
 
     libsnark::r1cs_ppzksnark_proof<libff::alt_bn128_pp> proof;
-
+    
     uint8_t A_g_x[64];
     uint8_t A_g_y[64];
     uint8_t A_h_x[64];
@@ -550,13 +464,7 @@ bool verifyDepositproof(char *data, char *RT, char *pk, char *cmtb_old, char *sn
     proof.g_K.X = k_x;
     proof.g_K.Y = k_y;
 
-    bool result = verify_deposit_proof(keypair.vk,
-                                       proof,
-                                       rt,
-                                       pk_recv,
-                                       cmtB_old,
-                                       sn_old,
-                                       cmtB);
+    bool result = verify_deposit_proof(keypair.vk, proof, cmtA_old,sn_old, cmtS , cmtA_new);
 
     if (!result)
     {
@@ -569,3 +477,4 @@ bool verifyDepositproof(char *data, char *RT, char *pk, char *cmtb_old, char *sn
 
     return result;
 }
+

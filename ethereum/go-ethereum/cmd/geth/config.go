@@ -182,7 +182,7 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 		}
 		zktx.SequenceNumber = &SNS.Suquence1
 		zktx.SequenceNumberAfter = &SNS.Suquence2
-		zktx.SNS = SNS.SNS
+		zktx.SNFD = SNS.SNS
 		zktx.RandomReceiverPK = &ecdsa.PublicKey{crypto.S256(), SNS.PKBX, SNS.PKBY}
 		zktx.Stage = SNS.Stage
 	}

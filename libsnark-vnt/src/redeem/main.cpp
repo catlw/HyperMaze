@@ -18,7 +18,6 @@ using namespace libff;
 using namespace std;
 
 #include "circuit/gadget.tcc"
-
 #define DEBUG 0
 
 // 生成proof

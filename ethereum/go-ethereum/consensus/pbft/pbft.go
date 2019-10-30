@@ -734,32 +734,36 @@ func (c *PBFT) Finalize(chain consensus.ChainReader, header *types.Header, state
 	header.UncleHash = types.CalcUncleHash(nil)
 	header.ZKFunds = make([]common.Hash, len(zkfunds))
 	copy(header.ZKFunds, zkfunds[:])
-	//compute merkle root for zkfunds
+
+	fundsformerkle := make([]common.Hash, len(zkfunds))
+	copy(fundsformerkle, zkfunds[:])
+	// //compute merkle root for zkfunds
 	number := header.Number.Uint64()
-	key := append(core.ZkfundsPrefix, core.EncodeBlockNumber(number-1)...)
+	// key := append(core.ZkfundsPrefix, core.EncodeBlockNumber(number-1)...)
 
-	var prehashes []common.Hash
-	var err error
-	var prehashesBytes []byte
-	db := c.db
-	if number != 0 {
-		prehashesBytes, err = db.Get(key)
-		if err != nil {
-			fmt.Println("get zkfunds from db error, block number", number-1)
-			return nil, err
-		}
-		if len(prehashesBytes) != 0 {
-			reader := bytes.NewReader(prehashesBytes)
-			if err = rlp.Decode(reader, &prehashes); err != nil {
-				fmt.Println("decode zkfd errorrrrr", number)
-				return nil, err
-			}
-		}
+	// var prehashes []common.Hash
+	// var err error
+	// var prehashesBytes []byte
+	// db := c.db
+	// if number != 0 {
+	// 	prehashesBytes, err = db.Get(key)
+	// 	if err != nil {
+	// 		fmt.Println("get zkfunds from db error, block number", number-1)
+	// 		return nil, err
+	// 	}
+	// 	if len(prehashesBytes) != 0 {
+	// 		reader := bytes.NewReader(prehashesBytes)
+	// 		if err = rlp.Decode(reader, &prehashes); err != nil {
+	// 			fmt.Println("decode zkfd errorrrrr", number)
+	// 			return nil, err
+	// 		}
+	// 	}
 
-	}
+	// }
 
-	hashes := append(prehashes, zkfunds...)
-	header.RootCMTfd = types.DeriveShaZkfunds(hashes)
+	//hashes := append(prehashes, zkfunds...)
+
+	header.RootCMTfd = types.DeriveShaZkfunds(fundsformerkle)
 	fmt.Println("zk fund root for block ", number, header.RootCMTfd)
 	// fmt.Printf("--------(c *PBFT) Finalize\n") ////xiaobei 1.10
 	// fmt.Printf("------root is %x\n",header.Root) ////xiaobei 1.10

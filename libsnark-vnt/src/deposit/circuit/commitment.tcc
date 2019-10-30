@@ -15,7 +15,7 @@ public:
         pb_variable_array<FieldT>& v,        // 64bits value
         pb_variable_array<FieldT>& sn_old,   // 256bits serial number
         pb_variable_array<FieldT>& rho,      // 256bits random number
-        std::shared_ptr<digest_variable<FieldT>> cmtB // 256bits hash
+        std::shared_ptr<digest_variable<FieldT>> cmtA // 256bits hash
     ) : gadget<FieldT>(pb, "sha256_two_block_gadget") {
 
         pb_variable_array<FieldT> first_of_r(rho.begin(), rho.begin()+192);
@@ -69,7 +69,7 @@ public:
             pb,
             IV2,
             block2->bits,
-            *cmtB,
+            *cmtA,
         "sha256_two_block_hash2"));
     }
 

@@ -14,13 +14,27 @@
 
 #include "Note.h"
 #include "uint256.h"
-#include "sendcgo.hpp"
-
+#include "convertcgo.hpp"
+#include "deps/sha256.h"
 using namespace libsnark;
 using namespace libff;
 using namespace std;
 
 #include "circuit/gadget.tcc"
+
+char* hash(char* data,uint64_t size){
+    cout<<"hash (data):   "<<data<<endl;
+    CSHA256 hasher;
+    hasher.Write((unsigned char*)(data),size);
+    uint256 result;
+    hasher.Finalize(result.begin());
+    std::string r = result.ToString();
+    char *p = new char[65];
+    r.copy(p, 64, 0);
+    *(p + 64) = '\0';
+  //  cout<<p<<endl;
+    return p;
+}
 
 int convertFromAscii(uint8_t ch)
 {
@@ -195,26 +209,24 @@ std::string string_proof_as_hex(libsnark::r1cs_ppzksnark_proof<libff::alt_bn128_
 }
 
 template <typename ppzksnark_ppT>
-r1cs_ppzksnark_proof<ppzksnark_ppT> generate_send_proof(r1cs_ppzksnark_proving_key<ppzksnark_ppT> proving_key,
+r1cs_ppzksnark_proof<ppzksnark_ppT> generate_convert_proof(r1cs_ppzksnark_proving_key<ppzksnark_ppT> proving_key,
                                                         Note &note_old,
-                                                        NoteS &notes,
-                                                        Note& note,
+                                                        Note &note,
                                                         uint256 cmtA_old,
-                                                        uint256 cmtS,
-                                                        uint256 cmtA)
+                                                        uint256 cmtA,
+                                                        uint64_t value_s)
 {
     typedef Fr<ppzksnark_ppT> FieldT;
 
     protoboard<FieldT> pb;         // 定义原始模型，该模型包含constraint_system成员变量
-    send_gadget<FieldT> g(pb);     // 构造新模型
+    convert_gadget<FieldT> g(pb);     // 构造新模型
     g.generate_r1cs_constraints(); // 生成约束
 
-    g.generate_r1cs_witness(note_old, notes, note, cmtA_old, cmtS, cmtA); // 为新模型的参数生成证明
+    g.generate_r1cs_witness(note_old, note, cmtA_old, cmtA, value_s); // 为新模型的参数生成证明
 
     if (!pb.is_satisfied())
     { // 三元组R1CS是否满足  < A , X > * < B , X > = < C , X >
-        //throw std::invalid_argument("Constraint system not satisfied by inputs");
-        cout << "can not generate send proof" << endl;
+        cout << "can not generate convert proof" << endl;
         return r1cs_ppzksnark_proof<ppzksnark_ppT>();
     }
 
@@ -224,25 +236,26 @@ r1cs_ppzksnark_proof<ppzksnark_ppT> generate_send_proof(r1cs_ppzksnark_proving_k
 
 // 验证proof
 template <typename ppzksnark_ppT>
-bool verify_send_proof(r1cs_ppzksnark_verification_key<ppzksnark_ppT> verification_key,
+bool verify_convert_proof(r1cs_ppzksnark_verification_key<ppzksnark_ppT> verification_key,
                   r1cs_ppzksnark_proof<ppzksnark_ppT> proof,
                   uint256 &cmtA_old,
                   uint256 &sn_old,
-                  uint256 &cmtS,
-                  uint256 &cmtA)
+                  uint256 &cmtA,
+                  uint64_t value_s)
 {
     typedef Fr<ppzksnark_ppT> FieldT;
 
-    const r1cs_primary_input<FieldT> input = send_gadget<FieldT>::witness_map(
+    const r1cs_primary_input<FieldT> input = convert_gadget<FieldT>::witness_map(
         cmtA_old,
         sn_old,
-        cmtS,
-        cmtA);
+        cmtA,
+        value_s);
 
     // 调用libsnark库中验证proof的函数
     return r1cs_ppzksnark_verifier_strong_IC<ppzksnark_ppT>(verification_key, input, proof);
 }
 
+//func GenCMT(value uint64, sn []byte, r []byte)
 char *genCMT(uint64_t value, char *sn_string, char *r_string)
 {
     uint256 sn = uint256S(sn_string);
@@ -251,83 +264,54 @@ char *genCMT(uint64_t value, char *sn_string, char *r_string)
     uint256 cmtA = note.cm();
     std::string cmtA_c = cmtA.ToString();
 
-    char *p = new char[67]; //必须使用new开辟空间 不然cgo调用该函数结束全为0
-    cmtA_c.copy(p, 66, 0);
-    *(p + 67) = '\0'; //手动加结束符
+    char *p = new char[65]; //必须使用new开辟空间 不然cgo调用该函数结束全为0
+    cmtA_c.copy(p, 64, 0);
+    *(p + 64) = '\0'; //手动加结束符
 
     return p;
 }
 
-char *genCMTS(uint64_t value_s, char *pk_string, char *sn_s_string, char *r_s_string, char *sn_old_string)
-{
-    uint160 pk = uint160S(pk_string);
-    uint256 sn_s = uint256S(sn_s_string);
-    uint256 r_s = uint256S(r_s_string);
-    uint256 sn = uint256S(sn_old_string);
-    NoteS notes = NoteS(value_s, pk, sn_s, r_s, sn);
-    uint256 cmtS = notes.cm();
-
-    std::string cmtS_c = cmtS.ToString();
-
-    char *p = new char[67]; //必须使用new开辟空间 不然cgo调用该函数结束全为0
-    cmtS_c.copy(p, 66, 0);
-    *(p + 66) = '\0'; //手动加结束符
-
-    return p;
-}
-
-char *genSendproof(uint64_t value_A,
-                   char *sn_s_string,
-                   char *r_s_string,
+char *genConvertproof(uint64_t value,
+                   uint64_t value_old,
+                   char *sn_old_string,
+                   char *r_old_string,
                    char *sn_string,
                    char *r_string,
-                   char *cmt_s_string,
+                   char *cmtA_old_string,
                    char *cmtA_string,
-                   uint64_t value_s,
-                   char *pk_string,
-                   uint64_t value_A_new,
-                   char *sn_A_new,
-                   char *r_A_new,
-                   char *cmt_A_new)
+                   uint64_t value_s)
 {
     //从字符串转uint256
-    uint256 sn_s = uint256S(sn_s_string);
-    uint256 r_s = uint256S(r_s_string);
+    uint256 sn_old = uint256S(sn_old_string);
+    uint256 r_old = uint256S(r_old_string);
     uint256 sn = uint256S(sn_string);
     uint256 r = uint256S(r_string);
-    uint256 cmtS = uint256S(cmt_s_string); //--zy
+    uint256 cmtA_old = uint256S(cmtA_old_string);
     uint256 cmtA = uint256S(cmtA_string);
-    uint160 pk = uint160S(pk_string);
-    uint256 snAnew = uint256S(sn_A_new);
-    uint256 rAnew = uint256S(r_A_new);
-    uint256 cmtAnew = uint256S(cmt_A_new);
-
-
     //计算sha256
-    Note note_old = Note(value_A, sn, r);
-    NoteS notes = NoteS(value_s, pk, sn_s, r_s, sn);
-    Note note_new = Note(value_A_new, snAnew, rAnew);
+    Note note_old = Note(value_old, sn_old, r_old);
+    Note note = Note(value, sn, r);
 
     //初始化参数
     alt_bn128_pp::init_public_params();
-
+    
     struct timeval t1, t2;
     double timeuse;
     gettimeofday(&t1,NULL);
 
     r1cs_ppzksnark_keypair<alt_bn128_pp> keypair;
-    //cout << "Trying to read send proving key file..." << endl;
-    //cout << "Please be patient as this may take about 25 seconds. " << endl;
-    keypair.pk = deserializeProvingKeyFromFile("/usr/local/prfKey/sendpk.txt");
+    //cout << "Trying to read convert proving key file..." << endl;
+    //cout << "Please be patient as this may take about 20 seconds. " << endl;
+    keypair.pk = deserializeProvingKeyFromFile("/usr/local/prfKey/convertpk.txt");
 
     gettimeofday(&t2,NULL);
     timeuse = t2.tv_sec - t1.tv_sec + (t2.tv_usec - t1.tv_usec)/1000000.0;
-    // printf("\n\n reading send pk Use Time:%fs\n\n",timeuse);
+    // printf("\n\n reading convert pk Use Time:%fs\n\n",timeuse);
 
     // 生成proof
-    cout << "Trying to generate send proof..." << endl;
+    // cout << "Trying to generate convert proof..." << endl;
 
-    libsnark::r1cs_ppzksnark_proof<libff::alt_bn128_pp> proof = generate_send_proof<alt_bn128_pp>(keypair.pk, note_old, notes, note_new, cmtA, cmtS , cmtAnew);
+    libsnark::r1cs_ppzksnark_proof<libff::alt_bn128_pp> proof = generate_convert_proof<alt_bn128_pp>(keypair.pk, note_old, note, cmtA_old, cmtA, value_s);
 
     //proof转字符串
     std::string proof_string = string_proof_as_hex(proof);
@@ -339,12 +323,11 @@ char *genSendproof(uint64_t value_A,
     return p;
 }
 
-bool verifySendproof(char *data, char *cmtA_old_string, char *sn_old_string, char *cmtS_string ,char *cmtA_new_string)
+bool verifyConvertproof(char *data, char *cmtA_old_string, char *sn_old_string, char *cmtA_string, uint64_t value_s)
 {
     uint256 sn_old = uint256S(sn_old_string);
-    uint256 cmtS = uint256S(cmtS_string);
     uint256 cmtA_old = uint256S(cmtA_old_string);
-    uint256 cmtA_new = uint256S(cmtA_new_string);
+    uint256 cmtA = uint256S(cmtA_string);
 
     alt_bn128_pp::init_public_params();
     
@@ -353,14 +336,14 @@ bool verifySendproof(char *data, char *cmtA_old_string, char *sn_old_string, cha
     gettimeofday(&t1,NULL);
 
     r1cs_ppzksnark_keypair<alt_bn128_pp> keypair;
-    keypair.vk = deserializevkFromFile("/usr/local/prfKey/sendvk.txt");
+    keypair.vk = deserializevkFromFile("/usr/local/prfKey/convertvk.txt");
 
     gettimeofday(&t2,NULL);
     timeuse = t2.tv_sec - t1.tv_sec + (t2.tv_usec - t1.tv_usec)/1000000.0;
-    // printf("\n\n reading send vk Use Time:%fs\n\n",timeuse);
+    // printf("\n\n reading convert vk Use Time:%fs\n\n",timeuse);
 
     libsnark::r1cs_ppzksnark_proof<libff::alt_bn128_pp> proof;
-    
+
     uint8_t A_g_x[64];
     uint8_t A_g_y[64];
     uint8_t A_h_x[64];
@@ -464,17 +447,16 @@ bool verifySendproof(char *data, char *cmtA_old_string, char *sn_old_string, cha
     proof.g_K.X = k_x;
     proof.g_K.Y = k_y;
 
-    bool result = verify_send_proof(keypair.vk, proof, cmtA_old,sn_old, cmtS , cmtA_new);
+    bool result = verify_convert_proof(keypair.vk, proof, cmtA_old, sn_old, cmtA, value_s);
 
     if (!result)
     {
-        cout << "Verifying send proof unsuccessfully!!!" << endl;
+        cout << "Verifying convert proof unsuccessfully!!!" << endl;
     }
     else
     {
-        cout << "Verifying send proof successfully!!!" << endl;
+        cout << "Verifying convert proof successfully!!!" << endl;
     }
 
     return result;
 }
-

@@ -444,6 +444,11 @@ web3._extend({
 	methods:
 	[
 		new web3._extend.Method({
+			name: 'getBalances',
+			call: 'eth_getBalances',
+			params: 1,
+		}),
+		new web3._extend.Method({
 			name: 'sendConvertTransaction',
 			call: 'eth_sendConvertTransaction',
 			params: 1,

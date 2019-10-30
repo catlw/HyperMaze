@@ -1,7 +1,7 @@
 package merkle
 
 /*
-#cgo LDFLAGS: -L/usr/local/lib -lzk_mint  -lzk_send  -lzk_deposit -lzk_redeem -lff  -lsnark -lstdc++  -lgmp -lgmpxx
+#cgo LDFLAGS: -L/usr/local/lib -lzk_convert -lzk_redeem  -lzk_deposit -lzk_withdraw -lff  -lsnark -lstdc++  -lgmp -lgmpxx
 #include "merkle.hpp"
 #include <stdlib.h>
 */
