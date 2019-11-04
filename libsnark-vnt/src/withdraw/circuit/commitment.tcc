@@ -208,3 +208,89 @@ public:
         hasher3->generate_r1cs_witness();
     }
 };
+
+
+// sha256(data+padding), 512bits < data.size() < 1024-64-1bits
+template<typename FieldT>
+class sha256_blkheader_gadget : gadget<FieldT> {
+private:
+    std::shared_ptr<block_variable<FieldT>> block1;
+    std::shared_ptr<block_variable<FieldT>> block2;
+    std::shared_ptr<sha256_compression_function_gadget<FieldT>> hasher1;
+    std::shared_ptr<digest_variable<FieldT>> intermediate_hash; // 中间hash值
+    std::shared_ptr<sha256_compression_function_gadget<FieldT>> hasher2;
+
+public:
+    sha256_blkheader_gadget(              // cmt_A = sha256(value, sn, r, padding)
+        protoboard<FieldT> &pb,
+        pb_variable<FieldT>& ZERO,
+        pb_variable_array<FieldT>& tx_root,   // 256bits serial number
+        pb_variable_array<FieldT>& state_root,   // 256bits serial number
+        pb_variable_array<FieldT>& cmt_root,   // 256bits serial number
+        //pb_variable_array<FieldT>& v,        // 64bits value
+        //pb_variable_array<FieldT>& sn_old,   // 256bits serial number
+        //pb_variable_array<FieldT>& rho,      // 256bits random number
+        std::shared_ptr<digest_variable<FieldT>> header // 256bits hash
+    ) : gadget<FieldT>(pb, "sha256_blkheader_gadget") {
+
+
+
+        intermediate_hash.reset(new digest_variable<FieldT>(pb, 256, ""));
+
+        // final padding = base_padding + length
+        pb_variable_array<FieldT> length_padding =
+            from_bits({
+                1,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,
+                0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,
+                0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,
+                0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,
+                0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,
+                0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, //192
+                // length of message (768 bits: 256+256+256)
+                0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,
+                0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,1,1, 0,0,0,0,0,0,0,0 // 8*8 = 64bits
+            }, ZERO); // 56*8=448bits
+
+        block1.reset(new block_variable<FieldT>(pb, {
+            tx_root,      // 256bits
+            state_root   // 256bits
+        }, "sha256_blkheader_gadget_block1"));
+
+        block2.reset(new block_variable<FieldT>(pb, {
+            cmt_root,      // 256bits
+            length_padding  // 256bits
+        }, "sha256_blkheader_gadget_block2"));
+
+        pb_linear_combination_array<FieldT> IV = SHA256_default_IV(pb);
+
+        hasher1.reset(new sha256_compression_function_gadget<FieldT>(
+            pb,
+            IV,
+            block1->bits,
+            *intermediate_hash,
+        "sha256_blkheader_hash1"));
+
+        pb_linear_combination_array<FieldT> IV2(intermediate_hash->bits); // hash迭代
+
+        hasher2.reset(new sha256_compression_function_gadget<FieldT>(
+            pb,
+            IV2,
+            block2->bits,
+            *header,
+        "sha256_blkheader_hash2"));
+    }
+
+    void generate_r1cs_constraints() {
+        // TODO: This may not be necessary if SHA256 constrains
+        // its output digests to be boolean anyway.
+        intermediate_hash->generate_r1cs_constraints();
+
+        hasher1->generate_r1cs_constraints();
+        hasher2->generate_r1cs_constraints();
+    }
+
+    void generate_r1cs_witness() {
+        hasher1->generate_r1cs_witness();
+        hasher2->generate_r1cs_witness();
+    }
+};

@@ -38,6 +38,7 @@ type Sequence struct {
 	Value  uint64
 	Valid  bool
 	Lock   sync.Mutex
+	SNbal  *common.Hash
 }
 
 type WriteSn struct {
@@ -411,28 +412,100 @@ func GenDepositProof(CMTA *common.Hash, ValueA uint64, RA *common.Hash, ValueS u
 	return []byte(goproof)
 }
 
-// func GenSendProof(CMTA *common.Hash, ValueA uint64, RA *common.Hash, ValueS uint64, pk *ecdsa.PublicKey, SNS *common.Hash, RS *common.Hash, SNA *common.Hash, CMTS *common.Hash, ValueAnew uint64, SNAnew *common.Hash, RAnew *common.Hash, CMTAnew *common.Hash) []byte {
-// 	cmtA_c := C.CString(common.ToHex(CMTA[:]))
-// 	valueA_c := C.ulong(ValueA)
-// 	rA_c := C.CString(common.ToHex(RA.Bytes()[:]))
-// 	valueS := C.ulong(ValueS)
-// 	PK := crypto.PubkeyToAddress(*pk) //--zy
-// 	pk_c := C.CString(common.ToHex(PK[:]))
-// 	snS := C.CString(common.ToHex(SNS.Bytes()[:]))
-// 	rS := C.CString(common.ToHex(RS.Bytes()[:]))
-// 	snA := C.CString(common.ToHex(SNA.Bytes()[:]))
-// 	cmtS := C.CString(common.ToHex(CMTS[:]))
-// 	//ValueAnew uint64 , SNAnew *common.Hash, RAnew *common.Hash,CMTAnew *common.Hash
-// 	valueANew_c := C.ulong(ValueAnew)
-// 	snAnew_c := C.CString(common.ToHex(SNAnew.Bytes()[:]))
-// 	rAnew_c := C.CString(common.ToHex(RAnew.Bytes()[:]))
-// 	cmtAnew_c := C.CString(common.ToHex(CMTAnew[:]))
+type BlockHead struct {
+	TxRoot      common.Hash
+	StateRoot   common.Hash
+	FdRoot      common.Hash
+	BlockNumber uint64
+}
 
-// 	cproof := C.genSendproof(valueA_c, snS, rS, snA, rA_c, cmtS, cmtA_c, valueS, pk_c, valueANew_c, snAnew_c, rAnew_c, cmtAnew_c)
-// 	var goproof string
-// 	goproof = C.GoString(cproof)
-// 	return []byte(goproof)
-// }
+type TxField struct {
+	ZKSN   common.Hash
+	ZKbal  common.Hash
+	Header common.Hash
+}
+
+type TxInBlock struct {
+	Txs     []common.Hash
+	Txindex uint32
+}
+type FDPath struct {
+	Funds         []common.Hash
+	FundIndex     uint32
+	FundsRoot     common.Hash
+	BlockHeads    []BlockHead
+	TxFields      []TxField
+	TxInBlocks    []TxInBlock
+	RootBlockHash common.Hash
+	Depth         uint32
+}
+
+func GenWithdrawProof1(CMTS *common.Hash, ValueS uint64, SNS *common.Hash, RS *common.Hash, SNA *common.Hash, ValueB uint64, CMTB *common.Hash, RB *common.Hash, SNB *common.Hash, CMTBnew *common.Hash, SNBnew *common.Hash, RBnew *common.Hash, toaddress []byte, path FDPath) []byte {
+	RTcmt := path.FundsRoot
+	cmtS_c := C.CString(common.ToHex(CMTS[:]))
+	valueS_c := C.ulong(ValueS)
+	pk_c := C.CString(common.ToHex(toaddress[:]))
+	SNS_c := C.CString(common.ToHex(SNS.Bytes()[:])) //--zy
+	RS_c := C.CString(common.ToHex(RS.Bytes()[:]))   //--zy
+	SNA_c := C.CString(common.ToHex(SNA.Bytes()[:]))
+	valueB_c := C.ulong(ValueB)
+	RB_c := C.CString(common.ToHex(RB.Bytes()[:])) //rA_c := C.CString(string(RA.Bytes()[:]))
+	SNB_c := C.CString(common.ToHex(SNB.Bytes()[:]))
+	SNBnew_c := C.CString(common.ToHex(SNBnew.Bytes()[:]))
+	RBnew_c := C.CString(common.ToHex(RBnew.Bytes()[:]))
+	cmtB_c := C.CString(common.ToHex(CMTB[:]))
+	RT_c := C.CString(common.ToHex(RTcmt.Bytes())) //--zy   rt
+
+	cmtBnew_c := C.CString(common.ToHex(CMTBnew[:]))
+	valueBNew_c := C.ulong(ValueB + ValueS)
+
+	CMTSForMerkle := path.Funds
+
+	var cmtArray string
+	for i := 0; i < len(CMTSForMerkle); i++ {
+		s := string(common.ToHex(CMTSForMerkle[i][:]))
+		cmtArray += s
+	}
+	cmtsM := C.CString(cmtArray)
+	nC := C.int(len(CMTSForMerkle))
+
+	cproof := C.genWithdrawproof(valueBNew_c, valueB_c, SNB_c, RB_c, SNBnew_c, RBnew_c, SNS_c, RS_c, cmtB_c, cmtBnew_c, valueS_c, pk_c, SNA_c, cmtS_c, cmtsM, nC, RT_c)
+	var goproof string
+	goproof = C.GoString(cproof)
+	return []byte(goproof)
+}
+
+func GenWithdrawProof(CMTS *common.Hash, ValueS uint64, SNS *common.Hash, RS *common.Hash, SNA *common.Hash, ValueB uint64, CMTB *common.Hash, RB *common.Hash, SNB *common.Hash, CMTBnew *common.Hash, SNBnew *common.Hash, RBnew *common.Hash, toaddress []byte, path FDPath) []byte {
+	cmtS_c := C.CString(common.ToHex(CMTS[:]))
+	valueS_c := C.ulong(ValueS)
+	pk_c := C.CString(common.ToHex(toaddress[:]))
+	SNS_c := C.CString(common.ToHex(SNS.Bytes()[:])) //--zy
+	RS_c := C.CString(common.ToHex(RS.Bytes()[:]))   //--zy
+	SNA_c := C.CString(common.ToHex(SNA.Bytes()[:]))
+	valueB_c := C.ulong(ValueB)
+	RB_c := C.CString(common.ToHex(RB.Bytes()[:])) //rA_c := C.CString(string(RA.Bytes()[:]))
+	SNB_c := C.CString(common.ToHex(SNB.Bytes()[:]))
+	SNBnew_c := C.CString(common.ToHex(SNBnew.Bytes()[:]))
+	RBnew_c := C.CString(common.ToHex(RBnew.Bytes()[:]))
+	cmtB_c := C.CString(common.ToHex(CMTB[:]))
+	RT_c := C.CString(common.ToHex(RTcmt)) //--zy   rt
+
+	cmtBnew_c := C.CString(common.ToHex(CMTBnew[:]))
+	valueBNew_c := C.ulong(ValueB + ValueS)
+
+	var cmtArray string
+	for i := 0; i < len(CMTSForMerkle); i++ {
+		s := string(common.ToHex(CMTSForMerkle[i][:]))
+		cmtArray += s
+	}
+	cmtsM := C.CString(cmtArray)
+	nC := C.int(len(CMTSForMerkle))
+
+	cproof := C.genDepositproof(valueBNew_c, valueB_c, SNB_c, RB_c, SNBnew_c, RBnew_c, SNS_c, RS_c, cmtB_c, cmtBnew_c, valueS_c, pk_c, SNA_c, cmtS_c, cmtsM, nC, RT_c)
+	var goproof string
+	goproof = C.GoString(cproof)
+	return []byte(goproof)
+}
 
 func GenR() *ecdsa.PrivateKey {
 	Ka, err := crypto.GenerateKey()

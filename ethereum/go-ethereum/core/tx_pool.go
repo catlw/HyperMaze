@@ -648,10 +648,12 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 // the pool due to pricing constraints.
 func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 	// If the transaction is already known, discard it
+
 	hash := tx.Hash()
+	fmt.Println("txpool add tx", hash.Hex(), tx)
 	if pool.all[hash] != nil {
 		log.Trace("Discarding already known transaction", "hash", hash)
-		fmt.Printf("\nDiscarding already known transaction:%x", hash) ////xiaobei 2.5
+		fmt.Println("Discarding already known transaction", hash.Hex()) ////xiaobei 2.5
 		return false, fmt.Errorf("known transaction: %x", hash)
 	}
 	// If the transaction fails basic validation, discard it

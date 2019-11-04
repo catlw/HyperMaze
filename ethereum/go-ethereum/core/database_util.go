@@ -519,9 +519,10 @@ func WriteTransactions(db ethdb.Database, block *types.Block) error {
 				if err != nil {
 					return err
 				}
-				if err := batch.Put(append(headerHash.Bytes(), headerTxMetaSuffix...), headerTxmetadata); err != nil {
+				if err := db.Put(append(headerHash.Bytes(), headerTxMetaSuffix...), headerTxmetadata); err != nil {
 					return err
 				}
+				fmt.Println("written block hash from children, header, contained in tx", headerHash.Hex(), tx.Hash().Hex())
 			}
 
 		}

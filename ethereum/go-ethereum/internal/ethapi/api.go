@@ -652,6 +652,263 @@ func (s *PublicTransactionPoolAPI) SendDepositTransaction(ctx context.Context, a
 	hash, err := submitZKTransaction(ctx, s.b, tx)
 
 	if err == nil {
+		zktx.SNFD = &zktx.Sequence{SN: SNFD, CMT: CMTFD, Random: RFD, Value: args.Value.ToInt().Uint64(), SNbal: SN.SN}
+		zktx.SequenceNumber = zktx.SequenceNumberAfter
+		zktx.SequenceNumberAfter = &zktx.Sequence{SN: newSN, CMT: newCMT, Random: newRandom, Value: newValue}
+		zktx.Stage = zktx.TxDeposit
+		SNS := zktx.SequenceS{*zktx.SequenceNumber, *zktx.SequenceNumberAfter, zktx.SNFD, nil, nil, zktx.TxDeposit}
+		SNSBytes, err := rlp.EncodeToBytes(SNS)
+
+		if err != nil {
+			fmt.Println("encode sns error")
+			return common.Hash{}, nil
+		}
+		SNSString := hex.EncodeToString(SNSBytes)
+		zktx.SNfile.Seek(0, 0) //write in the first line of the file
+		wt := bufio.NewWriter(zktx.SNfile)
+
+		wt.WriteString(SNSString)
+		wt.WriteString("\n") //write a line
+		wt.Flush()
+	}
+
+	//fmt.Println("***** mint transaction size: ", signed.Size())
+
+	return hash, err
+}
+
+type Fund struct {
+	SN     string
+	Random string
+	Value  uint32
+	CMT    string
+	SNbal  string
+}
+
+func (s *PublicTransactionPoolAPI) Getfund(ctx context.Context) (Fund, error) {
+	fd := Fund{
+		zktx.SNFD.SN.Hex(),
+		zktx.SNFD.Random.Hex(),
+		uint32(zktx.SNFD.Value),
+		zktx.SNFD.CMT.Hex(),
+		zktx.SNFD.SNbal.Hex(),
+	}
+	return fd, nil
+}
+
+type BlockHead struct {
+	TxRoot      common.Hash
+	StateRoot   common.Hash
+	FdRoot      common.Hash
+	BlockNumber uint64
+}
+
+type TxField struct {
+	ZKSN   common.Hash
+	ZKbal  common.Hash
+	Header common.Hash
+}
+
+type TxInBlock struct {
+	Txs     []common.Hash
+	Txindex uint32
+}
+type FDPath struct {
+	Funds         []common.Hash
+	FundIndex     uint32
+	FundsRoot     common.Hash
+	BlockHeads    []BlockHead
+	TxFields      []TxField
+	TxInBlocks    []TxInBlock
+	RootBlockHash common.Hash
+	Depth         uint32
+}
+
+func (s *PublicTransactionPoolAPI) ExtractPath(proof []hexutil.Bytes) (FDPath, error) {
+	return ExtractPathFromProof(proof)
+}
+
+func ExtractPathFromProof(proof []hexutil.Bytes) (FDPath, error) {
+	var err error
+
+	fdpath := FDPath{
+		Funds:      make([]common.Hash, 0),
+		BlockHeads: make([]BlockHead, 0),
+		TxFields:   make([]TxField, 0),
+		TxInBlocks: make([]TxInBlock, 0),
+	}
+
+	var blockhash common.Hash
+	if len(proof) < 2 {
+		return fdpath, errors.New("proof too short")
+	}
+
+	block1 := new(types.Block)
+	stream := rlp.NewStream(bytes.NewReader(proof[1][:]), 0)
+	err = stream.Decode(block1)
+	if err != nil {
+		fmt.Println("decode block err", err)
+		return fdpath, errors.New("decode block err")
+	}
+
+	//zkfunds
+	zkfunds := block1.Header().ZKFunds
+	for fd := range zkfunds {
+		fdpath.Funds = append(fdpath.Funds, zkfunds[fd])
+	}
+	fdpath.FundsRoot = block1.Header().RootCMTfd
+	//blockhead
+	blockhead := BlockHead{
+		block1.Header().TxHash,
+		block1.Header().Root,
+		block1.Header().RootCMTfd,
+		block1.Header().Number.Uint64(),
+	}
+
+	fdpath.BlockHeads = append(fdpath.BlockHeads, blockhead)
+
+	blockhash = block1.Hash()
+	for i := 2; i < len(proof); i++ {
+		var block types.Block
+		stream = rlp.NewStream(bytes.NewReader(proof[i][:]), 0)
+		err = stream.Decode(&block)
+		if err != nil {
+			fmt.Println("decode block err", err)
+			return fdpath, errors.New("decode block err")
+		}
+		var txsinblock TxInBlock
+		txs := block.Transactions()
+		for i := range txs {
+			txsinblock.Txs = append(txsinblock.Txs, txs[i].Hash())
+			if *(txs[i].Headers()[0]) == blockhash {
+				txsinblock.Txindex = uint32(i)
+				txfield := TxField{
+					txs[i].ZKSN(),
+					txs[i].ZKCMTbal(),
+					blockhash,
+				}
+				fdpath.TxFields = append(fdpath.TxFields, txfield)
+			}
+		}
+		fdpath.TxInBlocks = append(fdpath.TxInBlocks, txsinblock)
+
+		blockhead = BlockHead{
+			block.Header().TxHash,
+			block.Header().Root,
+			block.Header().RootCMTfd,
+			block.Header().Number.Uint64(),
+		}
+		blockhash = block.Hash()
+
+	}
+	fdpath.RootBlockHash = blockhash
+	fdpath.Depth = uint32(len(proof)) - 1
+	return fdpath, nil
+
+}
+
+func (s *PublicTransactionPoolAPI) SendWithdrawTransaction(ctx context.Context, args SendTxArgs3) (common.Hash, error) {
+
+	if zktx.SNfile == nil {
+		fmt.Println("SNfile does not exist")
+		return common.Hash{}, nil
+	}
+	if zktx.SequenceNumber == nil || zktx.SequenceNumberAfter == nil {
+		fmt.Println("SequenceNumber or SequenceNumberAfter nil")
+		return common.Hash{}, nil
+	}
+	state, _, err := s.b.StateAndHeaderByNumber(ctx, rpc.LatestBlockNumber)
+	if state == nil || err != nil {
+		return common.Hash{}, err
+	}
+
+	//check whether sn can be used
+	exist := state.Exist(common.BytesToAddress(zktx.SequenceNumberAfter.SN.Bytes()))
+
+	if exist == true && *(zktx.SequenceNumberAfter.SN) != *(zktx.InitializeSN().SN) {
+		fmt.Println("sn is lost")
+		return common.Hash{}, nil
+	}
+
+	//check whether last tx is processed successfully
+	exist = state.Exist(common.BytesToAddress(zktx.SequenceNumber.SN.Bytes()))
+
+	if exist == false && *(zktx.SequenceNumber.SN) != *(zktx.InitializeSN().SN) { //if last transaction is not processed successfully, the corresponding SN is not in the database,and we use SN before  last unprocessed transaction
+		// if zktx.Stage == zktx.Update {
+		// 	fmt.Println("last transaction is update,but it is not well processed,please send updateTx firstly")
+		// 	return common.Hash{}, nil
+		// }
+		zktx.SequenceNumberAfter = zktx.SequenceNumber
+	}
+
+	// Look up the wallet containing the requested signer
+	//	account := accounts.Account{Address: args.From}
+
+	// Set some sanity defaults and terminate on failure
+	args.Type = types.TxWithdraw //tbd
+	if err := args.setDefaults(ctx, s.b); err != nil {
+		return common.Hash{}, err
+	}
+	// Assemble the transaction and sign with the wallet
+	tx := args.toTransaction()
+
+	if tx == nil {
+		return common.Hash{}, nil
+	}
+
+	SN := zktx.SequenceNumberAfter
+	tx.SetZKSN(*SN.SN) //SN
+
+	// if SN.Value < args.Value.ToInt().Uint64() {
+	// 	return common.Hash{}, errors.New("insufficient  balance for deosit a fund")
+	// }
+
+	if uint64(args.Fdvalue) != args.Value.ToInt().Uint64() {
+		return common.Hash{}, errors.New("inconsistent withdraw value")
+	}
+
+	newSN := zktx.NewRandomHash()
+	newRandom := zktx.NewRandomHash()
+	newValue := SN.Value + args.Value.ToInt().Uint64()
+
+	newCMT := zktx.GenCMT(newValue, newSN.Bytes(), newRandom.Bytes()) //tbd
+	tx.SetZKCMTbal(*newCMT)                                           //cmt
+
+	toadd := &DHibeAddress{args.ToID, args.ToIndex}
+	toAddress := toadd.Address()
+
+	fromadd := &DHibeAddress{args.FromID, args.FromIndex}
+	fromAddress := fromadd.Address()
+	//args.Fdid = fromAddress
+
+	SNFD := common.HexToHash(args.Fdsn)
+	RFD := common.HexToHash(args.Fdrandom)
+	ValueFD := uint64(args.Fdvalue)
+	AddrFD := fromAddress
+	CMTFD := common.HexToHash(args.Fdcmt)
+	SNbalFD := common.HexToHash(args.Fdsnbal)
+	path, err := ExtractPathFromProof(args.Proof)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	fmt.Println("withdraw para")
+	//fmt.Println(SN.CMT, SN.Value, SN.Random, args.Value.ToInt().Uint64(), toAddress, SNFD, RFD, SN.SN, CMTFD, newValue, newSN, newRandom, newCMT)
+	zkProof := zktx.GenWithdrawProof(CMTFD, ValueFD, SNFD, RFD, SNbalFD, SN.Value, SN.CMT, SN.Random, SN.SN, newCMT, newSN, newRandom, toAddress.Bytes(), path)
+	//genProofStart := time.Now()
+	//zktx.GenDepositProof(SN.Value, SN.Random, newSN, newRandom, SN.CMT, SN.SN, newCMT, newValue)
+
+	//genProofEnd := time.Now()
+	// fmt.Println("***** GenMintProof Cost Time (ms): ", genProofEnd.Sub(genProofStart).Nanoseconds() / 1000000)
+
+	// if string(zkProof[0:10]) == "0000000000" {
+	// 	return common.Hash{}, errors.New("can't generate proof")
+	// }
+	tx.SetZKProof(zkProof)
+
+	fmt.Println("TX:", tx)
+	hash, err := submitZKTransaction(ctx, s.b, tx)
+
+	if err == nil {
 		zktx.SNFD = &zktx.Sequence{SN: SNFD, CMT: CMTFD, Random: RFD, Value: args.Value.ToInt().Uint64()}
 		zktx.SequenceNumber = zktx.SequenceNumberAfter
 		zktx.SequenceNumberAfter = &zktx.Sequence{SN: newSN, CMT: newCMT, Random: newRandom, Value: newValue}
@@ -1404,6 +1661,11 @@ func (s *PublicTransactionPoolAPI) GetTxProofByHash(ctx context.Context, hash co
 	return txProof, nil
 }
 
+// func (s *PublicTransactionPoolAPI) GetTxProofByProofBytes(ctx context.Context, hash common.Hash) (hexutil.Bytes, error) {
+// 	proof, err := GetTxProofByHash(ctx, hash)
+// 	return rlp.EncodeToBytes(proof, )
+// }
+
 func (s *PublicTransactionPoolAPI) GetTxProofByProof(ctx context.Context, proof []hexutil.Bytes) ([]hexutil.Bytes, error) {
 
 	if len(proof) < 2 {
@@ -1424,6 +1686,7 @@ func (s *PublicTransactionPoolAPI) GetTxProofByProof(ctx context.Context, proof 
 
 	blockData, err := s.b.ChainDb().Get(append(headerTxhash.Bytes(), 0x02))
 	if err != nil {
+		fmt.Println("proofbyproof,no header for", headerTxhash.Hex())
 		return nil, err
 	}
 
@@ -1584,22 +1847,28 @@ type SendTxArgs struct {
 
 // SendTxArgs represents the arguments to sumbit a new transaction into the transaction pool.
 type SendTxArgs3 struct {
-	Type      uint32          `json:"type"`
-	FromID    string          `json:"fromid"`
-	FromIndex uint32          `json:"fromindex"`
-	ToID      string          `json:"toid"`
-	ToIndex   uint32          `json:"toindex"`
-	Gas       *hexutil.Big    `json:"gas"`
-	GasPrice  *hexutil.Big    `json:"gasPrice"`
-	Value     *hexutil.Big    `json:"value"`
-	Data      hexutil.Bytes   `json:"data"`
-	Nonce     *hexutil.Uint64 `json:"nonce"`
-	//Proof      []hexutil.Bytes `json:"proof"`
-	TxPeriod   uint32 `json:"txperiod"`
-	TxInterval uint32 `json:"txinterval"`
-	Ternimal   uint32 `json:"terminal"`
-	Round      uint32 `json:"round"`
-	Speed      uint32 `json:"speed"`
+	Type       uint32          `json:"type"`
+	FromID     string          `json:"fromid"`
+	FromIndex  uint32          `json:"fromindex"`
+	ToID       string          `json:"toid"`
+	ToIndex    uint32          `json:"toindex"`
+	Gas        *hexutil.Big    `json:"gas"`
+	GasPrice   *hexutil.Big    `json:"gasPrice"`
+	Value      *hexutil.Big    `json:"value"`
+	Data       hexutil.Bytes   `json:"data"`
+	Nonce      *hexutil.Uint64 `json:"nonce"`
+	Proof      []hexutil.Bytes `json:"proof"`
+	TxPeriod   uint32          `json:"txperiod"`
+	TxInterval uint32          `json:"txinterval"`
+	Ternimal   uint32          `json:"terminal"`
+	Round      uint32          `json:"round"`
+	Speed      uint32          `json:"speed"`
+	Fdid       string          `json:"fdid"`
+	Fdvalue    uint32          `json:"fdvalue"`
+	Fdrandom   string          `json:"fdrandom"`
+	Fdsn       string          `json:"fdsn"`
+	Fdcmt      string          `json:"fdcmt"`
+	Fdsnbal    string          `json:"fdsnbal"`
 }
 
 // SendTxArgs represents the arguments to sumbit a new transaction into the transaction pool.

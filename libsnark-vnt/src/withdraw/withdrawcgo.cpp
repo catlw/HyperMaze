@@ -309,6 +309,8 @@ char *genRoot(char *cmtarray, int n)
     return p;
 }
 
+
+
 char *genWithdrawproof(uint64_t value,
                       uint64_t value_old,
                       char *sn_old_string,
@@ -384,6 +386,8 @@ char *genWithdrawproof(uint64_t value,
 
     auto path = wit.path();
     uint256 rt = wit.root();
+
+    cout << "tree.root" <<RT <<"wit.root"<<rt.GetHex();
 
     //初始化参数
     alt_bn128_pp::init_public_params();

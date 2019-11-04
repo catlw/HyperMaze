@@ -402,10 +402,12 @@ func (pm *ProtocolManager) addHeaderWithSigLoop() {
 
 			for _, peer := range peers {
 				if peer.peerFlag == p2p.UpperLevelPeer {
-					fmt.Println("send headerTx to upper level", hash.Hex(), newTx.Headers()[0].Hex())
+					fmt.Println("send headerTx to upper level", newTx.Hash().Hex(), newTx.Headers()[0].Hex())
 					peer.SendTransactions(types.Transactions{newTx})
 				}
 			}
+		} else {
+			fmt.Println("verify headerTx error", newTx.Hash().Hex(), newTx.Headers()[0].Hex())
 		}
 
 		//	types.WithSignature(newTx, sig)
@@ -1405,12 +1407,12 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			pm.headerTxLock.Unlock()
 			return nil
 		}
-		if _, ok := pm.headersMark[headertx.Tx.Hash()]; ok {
+		if _, ok := pm.headersMark[headertx.Tx.RLPHash()]; ok {
 			pm.headerTxLock.Unlock()
 			fmt.Println("already has header")
 			return nil
 		}
-		pm.headersMark[headertx.Tx.Hash()] = struct{}{}
+		pm.headersMark[headertx.Tx.RLPHash()] = struct{}{}
 		pm.headers[hash] = append(pm.headers[hash], headertx)
 		fmt.Println("headertxwithsig count", hash.Hex(), len(pm.headers[hash]), headertx.Tx.Headers()[0].Hex())
 		if uint32(len(pm.headers[hash])) >= node.Mn.M {
@@ -1479,7 +1481,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			id := data.Address
 			baseid := id[0 : len(id)-2]
 			var i uint16
-			for i = 1; i < 1; i++ {
+			for i = 1; i < 200; i++ {
 				var b1, b2 byte
 				b1 = byte(i >> 8)
 				b2 = byte(i)
