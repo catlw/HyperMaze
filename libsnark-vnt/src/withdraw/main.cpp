@@ -31,14 +31,11 @@ boost::optional<r1cs_ppzksnark_proof<ppzksnark_ppT>> generate_withdraw_proof(r1c
                                                                     const NoteS& note_s,
                                                                     const Note& note_old,
                                                                     const Note& note,
-                                                                    const NoteHeader note_header,
                                                                     uint256 cmtS,
                                                                     uint256 cmtB_old,
                                                                     uint256 cmtB,
-                                                                    uint256 tx_root,
-                                                                    uint256 state_root_data,
-                                                                    const uint256& header,
-                                                                    const MerklePath& path
+                                                                    const uint256& rt,
+                                                                     const MerklePath& path
                                                                    )
 {
     typedef Fr<ppzksnark_ppT> FieldT;
@@ -47,10 +44,8 @@ boost::optional<r1cs_ppzksnark_proof<ppzksnark_ppT>> generate_withdraw_proof(r1c
     withdraw_gadget<FieldT> withdraw(pb); // 构造新模型
     withdraw.generate_r1cs_constraints(); // 生成约束
 
-    withdraw.generate_r1cs_witness(note_s, note_old, note, note_header, cmtS, cmtB_old, cmtB,  header, path); // 为新模型的参数生成证明
+    withdraw.generate_r1cs_witness(note_s, note_old, note, cmtS, cmtB_old, cmtB, rt, path); // 为新模型的参数生成证明
 
-    cout<< "primary"<< pb.primary_input()<<endl;
-    //cout<< "aux" << pb.auxiliary_input()<<endl;
     cout << "pb.is_satisfied() is " << pb.is_satisfied() << endl;
 
     if (!pb.is_satisfied()) { // 三元组R1CS是否满足  < A , X > * < B , X > = < C , X >
@@ -65,7 +60,7 @@ boost::optional<r1cs_ppzksnark_proof<ppzksnark_ppT>> generate_withdraw_proof(r1c
 template<typename ppzksnark_ppT>
 bool verify_withdraw_proof(r1cs_ppzksnark_verification_key<ppzksnark_ppT> verification_key,
                     r1cs_ppzksnark_proof<ppzksnark_ppT> proof,
-                    const uint256& header,
+                    const uint256& rt,
                     const uint160& pk_recv,
                     const uint256& cmtB_old,
                     const uint256& sn_old,
@@ -74,7 +69,7 @@ bool verify_withdraw_proof(r1cs_ppzksnark_verification_key<ppzksnark_ppT> verifi
     typedef Fr<ppzksnark_ppT> FieldT;
 
     const r1cs_primary_input<FieldT> input = withdraw_gadget<FieldT>::witness_map(
-        header,
+        rt,
         pk_recv,
         cmtB_old,
         sn_old,
@@ -147,9 +142,6 @@ bool test_withdraw_gadget_with_instance(
     Note note = Note(value, sn, r);
     uint256 cmtB = note.cm();
 
-
-
-
     boost::array<uint256, 16> commitments; //16个cmts
     //std::vector<boost::optional<uint256>>& commitments;
     
@@ -194,21 +186,9 @@ bool test_withdraw_gadget_with_instance(
     auto path = wit.path();
     uint256 rt = wit.root();
 
-    uint256 tx_root = uint256S("1234");
-    uint256 state_root = uint256S("1234");
-    NoteHeader noteheader = NoteHeader(tx_root, state_root, rt);
-    uint256 header = noteheader.cm();
-
-
-
-
     cout << "tree.root = 0x" << tree.root().ToString() << endl;
     cout << "wit.root = 0x" << wit.root().ToString() << endl;
 
-
-
-
-    cout << "header = 0x" << header.ToString() << endl;
     // 错误测试数据
     ZCIncrementalMerkleTree wrong_tree;
     assert(wrong_tree.root() == ZCIncrementalMerkleTree::empty_root());
@@ -253,13 +233,10 @@ bool test_withdraw_gadget_with_instance(
                                                             note_s,
                                                             note_old,
                                                             note,
-                                                            noteheader,
                                                             cmtS,
                                                             cmtB_old,
                                                             cmtB,
-                                                            tx_root,
-                                                            state_root,
-                                                            header, //wrong_rt
+                                                            rt, //wrong_rt
                                                             path //wrong_path
                                                             );
 
@@ -282,7 +259,7 @@ bool test_withdraw_gadget_with_instance(
 
         bool result = verify_withdraw_proof(keypair.vk, 
                                     *proof, 
-                                    header, //wrong_rt
+                                    rt, //wrong_rt
                                     pk_recv,
                                     cmtB_old,
                                     sn_old,
@@ -336,7 +313,7 @@ int main () {
 
     gettimeofday(&t2,NULL);
     timeuse = t2.tv_sec - t1.tv_sec + (t2.tv_usec - t1.tv_usec)/1000000.0;
-    printf("\nwithdraw Use Time:%fs\n\n",timeuse);
+    printf("\n\Depoist Use Time:%fs\n\n",timeuse);
 
     libff::print_header("#             testing withdraw gadget");
 
@@ -350,4 +327,3 @@ int main () {
     
     return 0;
 }
-

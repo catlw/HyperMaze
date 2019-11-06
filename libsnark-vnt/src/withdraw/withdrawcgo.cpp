@@ -203,13 +203,10 @@ r1cs_ppzksnark_proof<ppzksnark_ppT> generate_withdraw_proof(r1cs_ppzksnark_provi
                                                            const NoteS &note_s,
                                                            const Note &note_old,
                                                            const Note &note,
-                                                           const NoteHeader &note_header,
                                                            uint256 cmtS,
                                                            uint256 cmtB_old,
                                                            uint256 cmtB,
-                                                           uint256 tx_root,
-                                                           uint256 state_root,
-                                                           const uint256 &header,
+                                                           const uint256 &rt,
                                                            const MerklePath &path)
 {
     typedef Fr<ppzksnark_ppT> FieldT;
@@ -218,7 +215,7 @@ r1cs_ppzksnark_proof<ppzksnark_ppT> generate_withdraw_proof(r1cs_ppzksnark_provi
     withdraw_gadget<FieldT> withdraw(pb);  // 构造新模型
     withdraw.generate_r1cs_constraints(); // 生成约束
 
-    withdraw.generate_r1cs_witness(note_s, note_old, note, note_header, cmtS, cmtB_old, cmtB, header, path); // 为新模型的参数生成证明
+    withdraw.generate_r1cs_witness(note_s, note_old, note, cmtS, cmtB_old, cmtB, rt, path); // 为新模型的参数生成证明
 
     if (!pb.is_satisfied())
     { // 三元组R1CS是否满足  < A , X > * < B , X > = < C , X >
@@ -236,7 +233,7 @@ template <typename ppzksnark_ppT>
 bool verify_withdraw_proof(r1cs_ppzksnark_verification_key<ppzksnark_ppT> verification_key,
                           r1cs_ppzksnark_proof<ppzksnark_ppT> proof,
                           // const uint256& merkle_root,
-                          const uint256 &header,
+                          const uint256 &rt,
                           const uint160 &pk_recv,
                           const uint256 &cmtB_old,
                           const uint256 &sn_old,
@@ -245,7 +242,7 @@ bool verify_withdraw_proof(r1cs_ppzksnark_verification_key<ppzksnark_ppT> verifi
     typedef Fr<ppzksnark_ppT> FieldT;
 
     const r1cs_primary_input<FieldT> input = withdraw_gadget<FieldT>::witness_map(
-        header,
+        rt,
         pk_recv,
         cmtB_old,
         sn_old,
@@ -298,7 +295,7 @@ char *genRoot(char *cmtarray, int n)
 
     for (int i = 0; i < n; i++)
     {
-        commitments[i] = uint256S(s.substr(i * 66, 66)); //分割cmtarray  0x+64个十六进制数 一共64字节
+        commitments[i] = uint256S(s.substr(i * 66, 66)); //分割cmtarray  0x+64个十六进制数 一共64位
         tree.append(commitments[i]);
     }
 
@@ -311,8 +308,6 @@ char *genRoot(char *cmtarray, int n)
 
     return p;
 }
-
-
 
 char *genWithdrawproof(uint64_t value,
                       uint64_t value_old,
@@ -330,10 +325,7 @@ char *genWithdrawproof(uint64_t value,
                       char *cmtS_string,
                       char *cmtarray,
                       int n,
-                      char *tree_root_string,
-                      char *header_string,
-                      char *tx_root_string,
-                      char *state_root_string)
+                      char *RT)
 {
     uint256 sn_old = uint256S(sn_old_string);
     uint256 r_old = uint256S(r_old_string);
@@ -343,19 +335,15 @@ char *genWithdrawproof(uint64_t value,
     uint256 r_s = uint256S(rs_string);
     uint256 cmtB_old = uint256S(cmtB_old_string);
     uint256 cmtB = uint256S(cmtB_string);
-    uint160 id_recv = uint160S(pk_string);
+    uint160 pk_recv = uint160S(pk_string);
     uint256 sn_A_old = uint256S(sn_A_oldstring);
     uint256 cmtS = uint256S(cmtS_string);
-    uint256 tx_root = uint256S(tx_root_string);
-    uint256 state_root = uint256S(state_root_string);
-    uint256 header = uint256S(header_string);
 
     Note note_old = Note(value_old, sn_old, r_old);
 
-    NoteS note_s = NoteS(value_s, id_recv, sn_s, r_s, sn_A_old);
+    NoteS note_s = NoteS(value_s, pk_recv, sn_s, r_s, sn_A_old);
 
     Note note = Note(value, sn, r);
-
 
     boost::array<uint256, 256> commitments; //256个cmts
     string sss = cmtarray;
@@ -397,11 +385,6 @@ char *genWithdrawproof(uint64_t value,
     auto path = wit.path();
     uint256 rt = wit.root();
 
-    NoteHeader note_header = NoteHeader(tx_root, state_root, rt);
-    uint256 header_cm = note_header.cm();
-
-    cout << "tree.root" << tree_root_string<<"wit.root"<<rt.GetHex();
-
     //初始化参数
     alt_bn128_pp::init_public_params();
 
@@ -425,13 +408,10 @@ char *genWithdrawproof(uint64_t value,
                                                                                                      note_s,
                                                                                                      note_old,
                                                                                                      note,
-                                                                                                     note_header,
                                                                                                      cmtS,
                                                                                                      cmtB_old,
                                                                                                      cmtB,
-                                                                                                     tx_root,
-                                                                                                     state_root,
-                                                                                                     header,
+                                                                                                     rt,
                                                                                                      path);
 
     //proof转字符串
