@@ -501,7 +501,7 @@ func GenWithdrawProof(CMTS *common.Hash, ValueS uint64, SNS *common.Hash, RS *co
 	cmtsM := C.CString(cmtArray)
 	nC := C.int(len(CMTSForMerkle))
 
-	cproof := C.genDepositproof(valueBNew_c, valueB_c, SNB_c, RB_c, SNBnew_c, RBnew_c, SNS_c, RS_c, cmtB_c, cmtBnew_c, valueS_c, pk_c, SNA_c, cmtS_c, cmtsM, nC, RT_c)
+	cproof := C.genWithdrawproof(valueBNew_c, valueB_c, SNB_c, RB_c, SNBnew_c, RBnew_c, SNS_c, RS_c, cmtB_c, cmtBnew_c, valueS_c, pk_c, SNA_c, cmtS_c, cmtsM, nC, RT_c)
 	var goproof string
 	goproof = C.GoString(cproof)
 	return []byte(goproof)

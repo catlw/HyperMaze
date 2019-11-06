@@ -28,6 +28,14 @@ public:
     pb_variable_array<FieldT> zk_unpacked_inputs; // 拆分为二进制
     std::shared_ptr<multipacking_gadget<FieldT>> unpacker; // 二进制转十进制转换器
 
+    std::shared_ptr<digest_variable<FieldT>> tx_root;
+    std::shared_ptr<digest_variable<FieldT>> state_root;
+    //std::shared_ptr<digest_variable<FieldT>> cmtfd_root;
+
+    std::shared_ptr<digest_variable<FieldT>> header; 
+    std::shared_ptr<sha256_blkheader_gadget<FieldT>> commit_to_input_header; // note_commitment
+
+
     std::shared_ptr<digest_variable<FieldT>> zk_merkle_root; 
     pb_variable<FieldT> value_enforce; // merkle_tree_gadget的参数
     std::shared_ptr<merkle_tree_gadget<FieldT>> witness_input; // merkle_tree_gadget 
@@ -79,7 +87,7 @@ public:
             zk_packed_inputs.allocate(pb, verifying_field_element_size()); 
             this->pb.set_input_sizes(verifying_field_element_size());
 
-            alloc_uint256(zk_unpacked_inputs, zk_merkle_root); // 追加merkle_root到zk_unpacked_inputs
+            alloc_uint256(zk_unpacked_inputs, header); 
             alloc_uint160(zk_unpacked_inputs, pk_recv);
             alloc_uint256(zk_unpacked_inputs, cmtB_old);
             alloc_uint256(zk_unpacked_inputs, sn_old);
@@ -103,6 +111,10 @@ public:
 
         ZERO.allocate(this->pb, FMT(this->annotation_prefix, "zero"));
         
+        tx_root.reset(new digest_variable<FieldT>(pb, 256, "tx root hash"));
+        state_root.reset(new digest_variable<FieldT>(pb, 256, "state root hash"));
+        //cmtfd_root.reset(new digest_variable<FieldT>(pb, 256, "cmtfd root hash"))
+
         value_s.allocate(pb, 64);
         sn_s.reset(new digest_variable<FieldT>(pb, 256, "serial number"));
         r_s.reset(new digest_variable<FieldT>(pb, 256, "random number"));
@@ -116,6 +128,10 @@ public:
         sn.reset(new digest_variable<FieldT>(pb, 256, "serial number"));
         r.reset(new digest_variable<FieldT>(pb, 256, "random number"));
         
+        zk_merkle_root.reset(new digest_variable<FieldT>(pb, 256, "merkle root"));
+
+
+
         noteADD.reset(new note_gadget_with_packing_and_ADD<FieldT>(
             pb,
             value_s, 
@@ -128,7 +144,9 @@ public:
             r_old,
             value, 
             sn,
-            r
+            r,
+            tx_root,
+            state_root
         ));
 
         commit_to_input_cmt_s.reset(new sha256_three_block_gadget<FieldT>( 
@@ -167,6 +185,15 @@ public:
             *zk_merkle_root,
             value_enforce
         ));
+
+        commit_to_input_header.reset(new sha256_blkheader_gadget<FieldT>(
+            pb,
+            ZERO,
+            tx_root->bits,
+            state_root->bits,
+            zk_merkle_root->bits,
+            header
+        ));
     }
 
     // 约束函数，为commitment_with_add_and_less_gadget的变量生成约束
@@ -194,6 +221,9 @@ public:
         zk_merkle_root->generate_r1cs_constraints();
         generate_boolean_r1cs_constraint<FieldT>(this->pb, value_enforce,"");
         witness_input->generate_r1cs_constraints();
+
+        header->generate_r1cs_constraints();
+        commit_to_input_header->generate_r1cs_constraints();
     }
 
     // 证据函数，为commitment_with_add_and_less_gadget的变量生成证据
@@ -201,13 +231,15 @@ public:
         const NoteS& note_s, 
         const Note& note_old, 
         const Note& note, 
+        const NoteHeader note_header,
         uint256 cmtS_data,
         uint256 cmtB_old_data,
         uint256 cmtB_data,
-        const uint256& rt,
+        uint256 header_data,
         const MerklePath& path
     ) {
-        noteADD->generate_r1cs_witness(note_s, note_old, note);
+        commit_to_input_header->generate_r1cs_witness();
+        noteADD->generate_r1cs_witness(note_s, note_old, note, note_header.tx_root, note_header.state_root);
 
         // Set enforce flag for nonzero input value
         this->pb.val(value_enforce) = (note_s.value != 0) ? FieldT::one() : FieldT::zero();
@@ -220,8 +252,15 @@ public:
         commit_to_inputs_cmt_old->generate_r1cs_witness();
         commit_to_inputs_cmt->generate_r1cs_witness();
 
+        
+
         // [SANITY CHECK] Ensure the commitment is
         // valid.
+
+            header->bits.fill_with_bits(
+            this->pb,
+            uint256_to_bool_vector(header_data)
+        );
         cmtS->bits.fill_with_bits(
             this->pb,
             uint256_to_bool_vector(cmtS_data)
@@ -235,6 +274,7 @@ public:
             uint256_to_bool_vector(cmtB_data)
         );
 
+
         // Witness merkle tree authentication path
         witness_input->generate_r1cs_witness(path);
 
@@ -243,10 +283,10 @@ public:
         // This ensures the read gadget constrains
         // the intended root in the event that
         // both inputs are zero-valued.
-        zk_merkle_root->bits.fill_with_bits(  // merkle_root填充
-            this->pb,
-            uint256_to_bool_vector(rt)
-        );
+        // zk_merkle_root->bits.fill_with_bits(  // merkle_root填充
+        //     this->pb,
+        //     uint256_to_bool_vector(rt)
+        // );
 
         // This happens last, because only by now are all the verifier inputs resolved.
         unpacker->generate_r1cs_witness_from_bits();
@@ -254,7 +294,7 @@ public:
 
     // 将bit形式的私密输入 打包转换为 域上的元素
     static r1cs_primary_input<FieldT> witness_map(
-        const uint256& rt,
+        const uint256& header,
         const uint160& pk_recv,
         const uint256& cmtB_old,
         const uint256& sn_old,
@@ -262,7 +302,7 @@ public:
     ) {
         std::vector<bool> verify_inputs;
 
-        insert_uint256(verify_inputs, rt);
+        insert_uint256(verify_inputs, header);
         insert_uint160(verify_inputs, pk_recv);
         insert_uint256(verify_inputs, cmtB_old);
         insert_uint256(verify_inputs, sn_old);
@@ -278,7 +318,7 @@ public:
     static size_t verifying_input_bit_size() {
         size_t acc = 0;
 
-        acc += 256; // merkle root
+        acc += 256; // blockheaderhash
         acc += 160; // pk_recv
         acc += 256; // cmtB_old
         acc += 256; // sn_old

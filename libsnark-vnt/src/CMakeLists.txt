@@ -195,3 +195,25 @@ target_include_directories(
   ${DEPENDS_DIR}/libsnark
   ${DEPENDS_DIR}/libsnark/depends/libfqfft
 )
+
+
+#########################
+add_executable(
+  withdraw
+
+  withdraw/main.cpp
+)
+
+target_link_libraries(
+  withdraw
+  
+  snark
+)
+
+target_include_directories(
+  withdraw
+
+  PUBLIC
+  ${DEPENDS_DIR}/libsnark
+  ${DEPENDS_DIR}/libsnark/depends/libfqfft
+)

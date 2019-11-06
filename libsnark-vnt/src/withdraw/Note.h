@@ -80,3 +80,37 @@ public:
         return result;
     }
 };
+
+class NoteHeader {
+public:
+
+    uint256 tx_root;
+    uint256 state_root;
+    uint256 cmtfd_root;
+
+    NoteHeader(uint256 tx_root, uint256 state_root, uint256 cmtfd_root)
+        : tx_root(tx_root), state_root(state_root), cmtfd_root(cmtfd_root) {}
+
+    // NoteS() {
+    //     //a_pk = random_uint256();
+    //     sn_s = random_uint256();
+    //     r = random_uint256();
+    //     value = 0;
+    // }
+
+    uint256 cm() const{
+
+        CSHA256 hasher;
+
+
+
+        hasher.Write(tx_root.begin(), 32);
+        hasher.Write(state_root.begin(), 32);
+        hasher.Write(cmtfd_root.begin(), 32);
+
+        uint256 result;
+        hasher.Finalize(result.begin());
+
+        return result;
+    }
+};
