@@ -35,7 +35,8 @@ boost::optional<r1cs_ppzksnark_proof<ppzksnark_ppT>> generate_withdraw_proof(r1c
                                                                     uint256 cmtB_old,
                                                                     uint256 cmtB,
                                                                     const uint256& rt,
-                                                                     const MerklePath& path
+                                                                     const MerklePath& path,
+                                                                     uint256 header
                                                                    )
 {
     typedef Fr<ppzksnark_ppT> FieldT;
@@ -44,7 +45,7 @@ boost::optional<r1cs_ppzksnark_proof<ppzksnark_ppT>> generate_withdraw_proof(r1c
     withdraw_gadget<FieldT> withdraw(pb); // 构造新模型
     withdraw.generate_r1cs_constraints(); // 生成约束
 
-    withdraw.generate_r1cs_witness(note_s, note_old, note, cmtS, cmtB_old, cmtB, rt, path); // 为新模型的参数生成证明
+    withdraw.generate_r1cs_witness(note_s, note_old, note, cmtS, cmtB_old, cmtB,header, rt, path); // 为新模型的参数生成证明
 
     cout << "pb.is_satisfied() is " << pb.is_satisfied() << endl;
 
@@ -64,11 +65,14 @@ bool verify_withdraw_proof(r1cs_ppzksnark_verification_key<ppzksnark_ppT> verifi
                     const uint160& pk_recv,
                     const uint256& cmtB_old,
                     const uint256& sn_old,
-                    const uint256& cmtB                  )
+                    const uint256& cmtB,
+                    const uint256& header
+                                          )
 {
     typedef Fr<ppzksnark_ppT> FieldT;
 
     const r1cs_primary_input<FieldT> input = withdraw_gadget<FieldT>::witness_map(
+        header,
         rt,
         pk_recv,
         cmtB_old,
@@ -142,6 +146,10 @@ bool test_withdraw_gadget_with_instance(
     Note note = Note(value, sn, r);
     uint256 cmtB = note.cm();
 
+    NoteHeader noteh = NoteHeader(uint256S("1"), uint256S("2"), uint256S("3"));
+    uint256 header = noteh.cm();
+    cout<<"header "<<header.ToString()<<endl;
+    cout<<"headers"<<uint256S(header.ToString()).ToString()<<endl;
     boost::array<uint256, 16> commitments; //16个cmts
     //std::vector<boost::optional<uint256>>& commitments;
     
@@ -206,6 +214,7 @@ bool test_withdraw_gadget_with_instance(
     uint160 wrong_pk_recv = uint160S("333");
     uint256 wrong_sn_old = uint256S("666");
 
+
     cout << "wit.wrong_root = 0x" << wrong_rt.ToString() << endl;
    
     typedef libff::Fr<ppzksnark_ppT> FieldT;
@@ -237,7 +246,8 @@ bool test_withdraw_gadget_with_instance(
                                                             cmtB_old,
                                                             cmtB,
                                                             rt, //wrong_rt
-                                                            path //wrong_path
+                                                            path, //wrong_path
+                                                            header
                                                             );
 
     gettimeofday(&gen_end,NULL);
@@ -257,13 +267,15 @@ bool test_withdraw_gadget_with_instance(
         double withdrawVerTimeUse;
         gettimeofday(&ver_start, NULL);
 
+        uint256 wrong_header = uint256S("666");
         bool result = verify_withdraw_proof(keypair.vk, 
                                     *proof, 
                                     rt, //wrong_rt
                                     pk_recv,
                                     cmtB_old,
                                     sn_old,
-                                    cmtB
+                                    cmtB,
+                                    header
                                    );
 
         gettimeofday(&ver_end, NULL);

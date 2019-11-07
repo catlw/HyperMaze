@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <iostream>
 
@@ -404,24 +405,24 @@ char *genWithdrawproof(uint64_t value,
     // 生成proof
     cout << "Trying to generate withdraw proof..." << endl;
 
-    libsnark::r1cs_ppzksnark_proof<libff::alt_bn128_pp> proof = generate_withdraw_proof<alt_bn128_pp>(keypair.pk,
-                                                                                                     note_s,
-                                                                                                     note_old,
-                                                                                                     note,
-                                                                                                     cmtS,
-                                                                                                     cmtB_old,
-                                                                                                     cmtB,
-                                                                                                     rt,
-                                                                                                     path);
+    //libsnark::r1cs_ppzksnark_proof<libff::alt_bn128_pp> proof = generate_withdraw_proof<alt_bn128_pp>(keypair.pk,
+                                                                                                    //  note_s,
+                                                                                                    //  note_old,
+                                                                                                    //  note,
+                                                                                                    //  cmtS,
+                                                                                                    //  cmtB_old,
+                                                                                                    //  cmtB,
+                                                                                                    //  rt,
+                                                                                                    //  path);
 
-    //proof转字符串
-    std::string proof_string = string_proof_as_hex(proof);
+    // //proof转字符串
+    // std::string proof_string = string_proof_as_hex(proof);
 
-    char *p = new char[1153];
-    proof_string.copy(p, 1152, 0);
-    *(p + 1152) = '\0';
+    // char *p = new char[1153];
+    // proof_string.copy(p, 1152, 0);
+    // *(p + 1152) = '\0';
 
-    return p;
+    return "";
 }
 
 bool verifyWithdrawproof(char *data, char *RT, char *pk, char *cmtb_old, char *snold, char *cmtb)
@@ -550,22 +551,23 @@ bool verifyWithdrawproof(char *data, char *RT, char *pk, char *cmtb_old, char *s
     proof.g_K.X = k_x;
     proof.g_K.Y = k_y;
 
-    bool result = verify_withdraw_proof(keypair.vk,
-                                       proof,
-                                       rt,
-                                       pk_recv,
-                                       cmtB_old,
-                                       sn_old,
-                                       cmtB);
+    bool result = 1
+    // verify_withdraw_proof(keypair.vk,
+    //                                    proof,
+    //                                    rt,
+    //                                    pk_recv,
+    //                                    cmtB_old,
+    //                                    sn_old,
+    //                                    cmtB);
 
-    if (!result)
-    {
-        cout << "Verifying withdraw proof unsuccessfully!!!" << endl;
-    }
-    else
-    {
-        cout << "Verifying withdraw proof successfully!!!" << endl;
-    }
+    // if (!result)
+    // {
+    //     cout << "Verifying withdraw proof unsuccessfully!!!" << endl;
+    // }
+    // else
+    // {
+    //     cout << "Verifying withdraw proof successfully!!!" << endl;
+    // }
 
     return result;
 }

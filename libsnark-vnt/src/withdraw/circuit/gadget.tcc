@@ -66,6 +66,12 @@ public:
 
     pb_variable<FieldT> ZERO;
 
+    std::shared_ptr<digest_variable<FieldT>> tx_root;
+    std::shared_ptr<digest_variable<FieldT>> state_root;
+    std::shared_ptr<digest_variable<FieldT>> fd_root;
+    std::shared_ptr<digest_variable<FieldT>> header;
+    std::shared_ptr<sha256_header_gadget<FieldT>> commit_to_header;
+
     withdraw_gadget(
         protoboard<FieldT>& pb
     ) : gadget<FieldT>(pb) {
@@ -78,7 +84,7 @@ public:
             // verification is.)
             zk_packed_inputs.allocate(pb, verifying_field_element_size()); 
             this->pb.set_input_sizes(verifying_field_element_size());
-
+            alloc_uint256(zk_unpacked_inputs, header);
             alloc_uint256(zk_unpacked_inputs, zk_merkle_root); // 追加merkle_root到zk_unpacked_inputs
             alloc_uint160(zk_unpacked_inputs, pk_recv);
             alloc_uint256(zk_unpacked_inputs, cmtB_old);
@@ -115,7 +121,12 @@ public:
         value.allocate(pb, 64);
         sn.reset(new digest_variable<FieldT>(pb, 256, "serial number"));
         r.reset(new digest_variable<FieldT>(pb, 256, "random number"));
-        
+
+        tx_root.reset(new digest_variable<FieldT>(pb, 256, "random number"));
+        state_root.reset(new digest_variable<FieldT>(pb, 256, "random number"));
+        fd_root.reset(new digest_variable<FieldT>(pb, 256, "random number"));
+       // header.reset(new digest_variable<FieldT>(pb, 256, "random number"));
+
         noteADD.reset(new note_gadget_with_packing_and_ADD<FieldT>(
             pb,
             value_s, 
@@ -167,6 +178,15 @@ public:
             *zk_merkle_root,
             value_enforce
         ));
+
+        commit_to_header.reset(new sha256_header_gadget<FieldT>( 
+            pb,
+            ZERO,
+            tx_root->bits,
+            state_root->bits,
+            fd_root->bits,
+            header
+        ));
     }
 
     // 约束函数，为commitment_with_add_and_less_gadget的变量生成约束
@@ -175,10 +195,15 @@ public:
         unpacker->generate_r1cs_constraints(true);
 
         noteADD->generate_r1cs_constraints();
-
+        tx_root->generate_r1cs_constraints();
+        state_root->generate_r1cs_constraints();
+        fd_root->generate_r1cs_constraints();
+        
         // Constrain `ZERO`
         generate_r1cs_equals_const_constraint<FieldT>(this->pb, ZERO, FieldT::zero(), "ZERO");
 
+        header->generate_r1cs_constraints();
+        commit_to_header->generate_r1cs_constraints();
         // TODO: These constraints may not be necessary if SHA256
         // already boolean constrains its outputs.
         cmtS->generate_r1cs_constraints();
@@ -204,11 +229,16 @@ public:
         uint256 cmtS_data,
         uint256 cmtB_old_data,
         uint256 cmtB_data,
+        uint256 headerdata,
         const uint256& rt,
         const MerklePath& path
     ) {
         noteADD->generate_r1cs_witness(note_s, note_old, note);
 
+        tx_root->bits.fill_with_bits(this->pb, uint256_to_bool_vector(uint256S("1")));
+        state_root->bits.fill_with_bits(this->pb, uint256_to_bool_vector(uint256S("2")));
+        fd_root->bits.fill_with_bits(this->pb, uint256_to_bool_vector(uint256S("3")));
+        
         // Set enforce flag for nonzero input value
         this->pb.val(value_enforce) = (note_s.value != 0) ? FieldT::one() : FieldT::zero();
 
@@ -219,9 +249,11 @@ public:
         commit_to_input_cmt_s->generate_r1cs_witness();
         commit_to_inputs_cmt_old->generate_r1cs_witness();
         commit_to_inputs_cmt->generate_r1cs_witness();
-
+        commit_to_header->generate_r1cs_witness();
         // [SANITY CHECK] Ensure the commitment is
         // valid.
+        header->bits.fill_with_bits(this->pb, uint256_to_bool_vector(headerdata));
+
         cmtS->bits.fill_with_bits(
             this->pb,
             uint256_to_bool_vector(cmtS_data)
@@ -254,6 +286,7 @@ public:
 
     // 将bit形式的私密输入 打包转换为 域上的元素
     static r1cs_primary_input<FieldT> witness_map(
+        const uint256& header,
         const uint256& rt,
         const uint160& pk_recv,
         const uint256& cmtB_old,
@@ -261,7 +294,7 @@ public:
         const uint256& cmtB
     ) {
         std::vector<bool> verify_inputs;
-
+        insert_uint256(verify_inputs, header);
         insert_uint256(verify_inputs, rt);
         insert_uint160(verify_inputs, pk_recv);
         insert_uint256(verify_inputs, cmtB_old);
@@ -277,7 +310,7 @@ public:
     // 计算输入元素的bit大小
     static size_t verifying_input_bit_size() {
         size_t acc = 0;
-
+        acc += 256;
         acc += 256; // merkle root
         acc += 160; // pk_recv
         acc += 256; // cmtB_old
