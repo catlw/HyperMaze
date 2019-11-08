@@ -13,8 +13,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-var TxMerkleNODES = 32
-var ZkfundsMerkleNODES = 256
+var TxMerkleNODES = 16
+var ZkfundsMerkleNODES = 16
 var emptynode = common.HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
 
 func GenTxRoot(nodes []common.Hash) common.Hash {
@@ -43,7 +43,7 @@ func GenZKfundsRoot(nodes []common.Hash) common.Hash {
 	for i := 0; i < len(nodes); i++ {
 		appendNodes = append(appendNodes, &nodes[i])
 	}
-	for len(appendNodes) < ZkfundsMerkleNODES {
+	for i := len(appendNodes); i < ZkfundsMerkleNODES; i++ {
 		appendNodes = append(appendNodes, &emptynode)
 	}
 	return GenRT(appendNodes)

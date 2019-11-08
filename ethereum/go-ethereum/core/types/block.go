@@ -34,8 +34,10 @@ import (
 
 var (
 	EmptyTxRootHash = DeriveShaTx(Transactions{})
-	EmptyRootHash   = DeriveSha(Transactions{})
-	EmptyUncleHash  = CalcUncleHash(nil)
+	//EmptyTxRootHash = common.HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+	EmptyRootHash = DeriveSha(Transactions{})
+	//EmptyRootHash  = common.HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+	EmptyUncleHash = CalcUncleHash(nil)
 )
 
 // A BlockNonce is a 64-bit hash which proves (combined with the

@@ -454,10 +454,26 @@ web3._extend({
 			params: 1,
 		}),
 		new web3._extend.Method({
+			name: 'sendRedeemTransaction',
+			call: 'eth_sendRedeemTransaction',
+			params: 1,
+		}),
+		new web3._extend.Method({
 			name: 'sendDepositTransaction',
 			call: 'eth_sendDepositTransaction',
 			params: 1,
 		}),
+		new web3._extend.Method({
+			name: 'sendWithdrawTransaction',
+			call: 'eth_sendWithdrawTransaction',
+			params: 1,
+		}),
+		new web3._extend.Method({
+			name: 'extractPath',
+			call: 'eth_extractPath',
+			params: 1,
+		}),
+
 		new web3._extend.Method({
 			name: 'stopSend',
 			call: 'eth_stopSend',
@@ -509,8 +525,8 @@ web3._extend({
 			params: 1,
 		}),
 		new web3._extend.Method({
-			name: 'extractPath',
-			call: 'eth_extractPath',
+			name: 'getFund',
+			call: 'eth_getFund',
 			params: 1,
 		}),
 		new web3._extend.Method({

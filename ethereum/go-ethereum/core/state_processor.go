@@ -151,13 +151,24 @@ func ApplyTransaction(config *params.ChainConfig, bc *BlockChain, author *common
 			}
 			cmtbalance := statedb.GetCMTBalance(msg.From())
 			if err = zktx.VerifyDepositProof(tx.ZKSN(), tx.ZKCMTfd(), tx.ZKProof(), cmtbalance, tx.ZKCMTbal()); err != nil {
-				fmt.Println("invalid zk send proof: ", err)
+				fmt.Println("invalid zk depoist proof: ", err)
 				return nil, big.NewInt(0), err
 			}
 			statedb.CreateAccount(common.BytesToAddress(tx.ZKSN().Bytes()))
 			statedb.SetNonce(common.BytesToAddress(tx.ZKSN().Bytes()), 1)
 		}
-
+		if tx.TxCode() == types.TxWithdraw {
+			if exist := statedb.Exist(common.BytesToAddress(tx.ZKSN().Bytes())); exist == true && ((tx.ZKSN()) != common.Hash{}) { //if sn is already exist,
+				return nil, big.NewInt(0), errors.New("sn is already used ")
+			}
+			cmtbalance := statedb.GetCMTBalance(msg.From())
+			if err = zktx.VerifyWithdrawProof(msg.From(), tx.ZKHeader(), cmtbalance, tx.ZKSN(), tx.ZKCMTbal(), tx.ZKProof()); err != nil {
+				fmt.Println("invalid zk withdraw proof: ", err)
+				return nil, big.NewInt(0), err
+			}
+			statedb.CreateAccount(common.BytesToAddress(tx.ZKSN().Bytes()))
+			statedb.SetNonce(common.BytesToAddress(tx.ZKSN().Bytes()), 1)
+		}
 		// else if tx.TxCode() == types.TxWithdraw {
 		// 	if exist := statedb.Exist(common.BytesToAddress(tx.ZKSN().Bytes())); exist == true && (*(tx.ZKSN()) != common.Hash{}) { //if sn is already exist,
 		// 		return nil, 0, errors.New("sn is already used ")

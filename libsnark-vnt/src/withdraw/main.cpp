@@ -25,18 +25,44 @@ using namespace libvnt;
 
 #define DEBUG 0
 
-// 生成proof
+
+char *genRoot(char *cmtarray, int n)
+{
+    boost::array<uint256, 256> commitments; //256个cmts
+
+    string s = cmtarray;
+
+    ZCIncrementalMerkleTree tree;
+    assert(tree.root() == ZCIncrementalMerkleTree::empty_root());
+
+    for (int i = 0; i < n; i++)
+    {
+        commitments[i] = uint256S(s.substr(i * 66, 66)); //分割cmtarray  0x+64个十六进制数 一共64位
+        tree.append(commitments[i]);
+    }
+
+    uint256 rt = tree.root();
+    std::string rt_c = rt.ToString();
+
+    char *p = new char[65]; //必须使用new开辟空间 不然cgo调用该函数结束全为0   65
+    rt_c.copy(p, 64, 0);
+    *(p + 64) = '\0'; //手动加结束符
+
+    return p;
+}
+
 template<typename ppzksnark_ppT>
 boost::optional<r1cs_ppzksnark_proof<ppzksnark_ppT>> generate_withdraw_proof(r1cs_ppzksnark_proving_key<ppzksnark_ppT> proving_key,
                                                                     const NoteS& note_s,
                                                                     const Note& note_old,
                                                                     const Note& note,
+                                                                    const NoteHeader& noteheader,
                                                                     uint256 cmtS,
                                                                     uint256 cmtB_old,
                                                                     uint256 cmtB,
                                                                     const uint256& rt,
-                                                                     const MerklePath& path,
-                                                                     uint256 header
+                                                                    const MerklePath& path,
+                                                                    uint256 header
                                                                    )
 {
     typedef Fr<ppzksnark_ppT> FieldT;
@@ -45,7 +71,7 @@ boost::optional<r1cs_ppzksnark_proof<ppzksnark_ppT>> generate_withdraw_proof(r1c
     withdraw_gadget<FieldT> withdraw(pb); // 构造新模型
     withdraw.generate_r1cs_constraints(); // 生成约束
 
-    withdraw.generate_r1cs_witness(note_s, note_old, note, cmtS, cmtB_old, cmtB,header, rt, path); // 为新模型的参数生成证明
+    withdraw.generate_r1cs_witness(note_s, note_old, note, noteheader, cmtS, cmtB_old, cmtB,header, rt, path); // 为新模型的参数生成证明
 
     cout << "pb.is_satisfied() is " << pb.is_satisfied() << endl;
 
@@ -61,7 +87,7 @@ boost::optional<r1cs_ppzksnark_proof<ppzksnark_ppT>> generate_withdraw_proof(r1c
 template<typename ppzksnark_ppT>
 bool verify_withdraw_proof(r1cs_ppzksnark_verification_key<ppzksnark_ppT> verification_key,
                     r1cs_ppzksnark_proof<ppzksnark_ppT> proof,
-                    const uint256& rt,
+                   // const uint256& rt,
                     const uint160& pk_recv,
                     const uint256& cmtB_old,
                     const uint256& sn_old,
@@ -73,7 +99,7 @@ bool verify_withdraw_proof(r1cs_ppzksnark_verification_key<ppzksnark_ppT> verifi
 
     const r1cs_primary_input<FieldT> input = withdraw_gadget<FieldT>::witness_map(
         header,
-        rt,
+       // rt,
         pk_recv,
         cmtB_old,
         sn_old,
@@ -146,10 +172,7 @@ bool test_withdraw_gadget_with_instance(
     Note note = Note(value, sn, r);
     uint256 cmtB = note.cm();
 
-    NoteHeader noteh = NoteHeader(uint256S("1"), uint256S("2"), uint256S("3"));
-    uint256 header = noteh.cm();
-    cout<<"header "<<header.ToString()<<endl;
-    cout<<"headers"<<uint256S(header.ToString()).ToString()<<endl;
+
     boost::array<uint256, 16> commitments; //16个cmts
     //std::vector<boost::optional<uint256>>& commitments;
     
@@ -167,12 +190,16 @@ bool test_withdraw_gadget_with_instance(
         //cout << "commitments[" << i << "] = 0x" << commitments[i].ToString() << endl;
     }
 
+
+
     ZCIncrementalMerkleTree tree;
+    ZCIncrementalMerkleTree tree2;
     assert(tree.root() == ZCIncrementalMerkleTree::empty_root());
     
     ZCIncrementalWitness wit = tree.witness(); //初始化witness
     bool find_cmtS = false;
     for (size_t i = 0; i < 16; i++) {
+        tree2.append(commitments[i]);
         if (find_cmtS) {
             wit.append(commitments[i]);
         } else {
@@ -193,9 +220,18 @@ bool test_withdraw_gadget_with_instance(
 
     auto path = wit.path();
     uint256 rt = wit.root();
+    uint256 root2 = tree2.root();
+
+
 
     cout << "tree.root = 0x" << tree.root().ToString() << endl;
     cout << "wit.root = 0x" << wit.root().ToString() << endl;
+    cout << "tree2.root = 0x" << root2.ToString() << endl;
+
+    NoteHeader noteh = NoteHeader(uint256S("1"), uint256S("2"), rt);
+    uint256 header = noteh.cm();
+    cout<<"header "<<header.ToString()<<endl;
+    cout<<"headers"<<uint256S(header.ToString()).ToString()<<endl;
 
     // 错误测试数据
     ZCIncrementalMerkleTree wrong_tree;
@@ -242,6 +278,7 @@ bool test_withdraw_gadget_with_instance(
                                                             note_s,
                                                             note_old,
                                                             note,
+                                                            noteh,
                                                             cmtS,
                                                             cmtB_old,
                                                             cmtB,
@@ -252,7 +289,7 @@ bool test_withdraw_gadget_with_instance(
 
     gettimeofday(&gen_end,NULL);
     withdrawTimeUse = gen_end.tv_sec - gen_start.tv_sec + (gen_end.tv_usec - gen_start.tv_usec)/1000000.0;
-    printf("\n\nGen Depoist Proof Use Time:%fs\n\n", withdrawTimeUse);
+    printf("\n\nGen withdraw Proof Use Time:%fs\n\n", withdrawTimeUse);
 
     // verify proof
     if (!proof) {
@@ -270,7 +307,7 @@ bool test_withdraw_gadget_with_instance(
         uint256 wrong_header = uint256S("666");
         bool result = verify_withdraw_proof(keypair.vk, 
                                     *proof, 
-                                    rt, //wrong_rt
+                                   // rt, //wrong_rt
                                     pk_recv,
                                     cmtB_old,
                                     sn_old,

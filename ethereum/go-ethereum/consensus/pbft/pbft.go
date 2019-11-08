@@ -764,7 +764,7 @@ func (c *PBFT) Finalize(chain consensus.ChainReader, header *types.Header, state
 	//hashes := append(prehashes, zkfunds...)
 
 	header.RootCMTfd = types.DeriveShaZkfunds(fundsformerkle)
-	fmt.Println("zk fund root for block ", number, header.RootCMTfd)
+	fmt.Println("zk fund root for block ", number, header.RootCMTfd.Hex())
 	// fmt.Printf("--------(c *PBFT) Finalize\n") ////xiaobei 1.10
 	// fmt.Printf("------root is %x\n",header.Root) ////xiaobei 1.10
 	// Assemble and return the final block for sealing

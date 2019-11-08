@@ -199,30 +199,32 @@ std::string string_proof_as_hex(libsnark::r1cs_ppzksnark_proof<libff::alt_bn128_
     return proof_string;
 }
 
-template <typename ppzksnark_ppT>
+template<typename ppzksnark_ppT>
 r1cs_ppzksnark_proof<ppzksnark_ppT> generate_withdraw_proof(r1cs_ppzksnark_proving_key<ppzksnark_ppT> proving_key,
-                                                           const NoteS &note_s,
-                                                           const Note &note_old,
-                                                           const Note &note,
-                                                           uint256 cmtS,
-                                                           uint256 cmtB_old,
-                                                           uint256 cmtB,
-                                                           const uint256 &rt,
-                                                           const MerklePath &path)
+                                                                    const NoteS& note_s,
+                                                                    const Note& note_old,
+                                                                    const Note& note,
+                                                                    const NoteHeader& noteheader,
+                                                                    uint256 cmtS,
+                                                                    uint256 cmtB_old,
+                                                                    uint256 cmtB,
+                                                                    const uint256& rt,
+                                                                    const MerklePath& path,
+                                                                    uint256 header
+                                                                   )
 {
     typedef Fr<ppzksnark_ppT> FieldT;
 
-    protoboard<FieldT> pb;               // 定义原始模型，该模型包含constraint_system成员变量
-    withdraw_gadget<FieldT> withdraw(pb);  // 构造新模型
+    protoboard<FieldT> pb;  // 定义原始模型，该模型包含constraint_system成员变量
+    withdraw_gadget<FieldT> withdraw(pb); // 构造新模型
     withdraw.generate_r1cs_constraints(); // 生成约束
 
-    withdraw.generate_r1cs_witness(note_s, note_old, note, cmtS, cmtB_old, cmtB, rt, path); // 为新模型的参数生成证明
+    withdraw.generate_r1cs_witness(note_s, note_old, note, noteheader, cmtS, cmtB_old, cmtB,header, rt, path); // 为新模型的参数生成证明
 
-    if (!pb.is_satisfied())
-    { // 三元组R1CS是否满足  < A , X > * < B , X > = < C , X >
-        //throw std::invalid_argument("Constraint system not satisfied by inputs");
-        cout << "can not generate withdraw proof" << endl;
-        return r1cs_ppzksnark_proof<ppzksnark_ppT>();
+    cout << "pb.is_satisfied() is " << pb.is_satisfied() << endl;
+
+    if (!pb.is_satisfied()) { // 三元组R1CS是否满足  < A , X > * < B , X > = < C , X >
+       return r1cs_ppzksnark_proof<ppzksnark_ppT>();
     }
 
     // 调用libsnark库中生成proof的函数
@@ -230,24 +232,25 @@ r1cs_ppzksnark_proof<ppzksnark_ppT> generate_withdraw_proof(r1cs_ppzksnark_provi
 }
 
 // 验证proof
-template <typename ppzksnark_ppT>
+template<typename ppzksnark_ppT>
 bool verify_withdraw_proof(r1cs_ppzksnark_verification_key<ppzksnark_ppT> verification_key,
-                          r1cs_ppzksnark_proof<ppzksnark_ppT> proof,
-                          // const uint256& merkle_root,
-                          const uint256 &rt,
-                          const uint160 &pk_recv,
-                          const uint256 &cmtB_old,
-                          const uint256 &sn_old,
-                          const uint256 &cmtB)
+                    r1cs_ppzksnark_proof<ppzksnark_ppT> proof,
+                    const uint160& pk_recv,
+                    const uint256& cmtB_old,
+                    const uint256& sn_old,
+                    const uint256& cmtB,
+                    const uint256& header
+                                          )
 {
     typedef Fr<ppzksnark_ppT> FieldT;
 
     const r1cs_primary_input<FieldT> input = withdraw_gadget<FieldT>::witness_map(
-        rt,
+        header,
         pk_recv,
         cmtB_old,
         sn_old,
-        cmtB);
+        cmtB
+    ); 
 
     // 调用libsnark库中验证proof的函数
     return r1cs_ppzksnark_verifier_strong_IC<ppzksnark_ppT>(verification_key, input, proof);
@@ -310,7 +313,9 @@ char *genRoot(char *cmtarray, int n)
     return p;
 }
 
-char *genWithdrawproof(uint64_t value,
+char *genWithdrawproof1(char *tx_root_string,
+                      char *state_root_string,
+                      uint64_t value,
                       uint64_t value_old,
                       char *sn_old_string,
                       char *r_old_string,
@@ -326,8 +331,10 @@ char *genWithdrawproof(uint64_t value,
                       char *cmtS_string,
                       char *cmtarray,
                       int n,
-                      char *RT)
+                      char *header_string)
 {
+    uint256 tx_root = uint256S(tx_root_string);
+    uint256 state_root = uint256S(state_root_string);
     uint256 sn_old = uint256S(sn_old_string);
     uint256 r_old = uint256S(r_old_string);
     uint256 sn = uint256S(sn_string);
@@ -339,6 +346,7 @@ char *genWithdrawproof(uint64_t value,
     uint160 pk_recv = uint160S(pk_string);
     uint256 sn_A_old = uint256S(sn_A_oldstring);
     uint256 cmtS = uint256S(cmtS_string);
+    uint256 header = uint256S(header_string);
 
     Note note_old = Note(value_old, sn_old, r_old);
 
@@ -386,6 +394,8 @@ char *genWithdrawproof(uint64_t value,
     auto path = wit.path();
     uint256 rt = wit.root();
 
+    NoteHeader noteheader = NoteHeader(tx_root, state_root, rt);
+
     //初始化参数
     alt_bn128_pp::init_public_params();
 
@@ -405,29 +415,38 @@ char *genWithdrawproof(uint64_t value,
     // 生成proof
     cout << "Trying to generate withdraw proof..." << endl;
 
-    //libsnark::r1cs_ppzksnark_proof<libff::alt_bn128_pp> proof = generate_withdraw_proof<alt_bn128_pp>(keypair.pk,
-                                                                                                    //  note_s,
-                                                                                                    //  note_old,
-                                                                                                    //  note,
-                                                                                                    //  cmtS,
-                                                                                                    //  cmtB_old,
-                                                                                                    //  cmtB,
-                                                                                                    //  rt,
-                                                                                                    //  path);
+    cout << "genWithdrawproof1 fdroot " << rt.ToString()<< endl;
+    cout << "genWithdrawproof1 txroot " << noteheader.tx_root.ToString()<< endl;
+    cout << "genWithdrawproof1 stateroot " << noteheader.state_root.ToString()<< endl;
+    cout << "genWithdrawproof1 header " << header.ToString()<< endl;
 
-    // //proof转字符串
-    // std::string proof_string = string_proof_as_hex(proof);
+    libsnark::r1cs_ppzksnark_proof<libff::alt_bn128_pp> proof = generate_withdraw_proof<alt_bn128_pp>(keypair.pk,
+                                                                                                     note_s,
+                                                                                                     note_old,
+                                                                                                     note,
+                                                                                                     noteheader,
+                                                                                                     cmtS,
+                                                                                                     cmtB_old,
+                                                                                                     cmtB,
+                                                                                                     rt,
+                                                                                                     path,
+                                                                                                     header);
 
-    // char *p = new char[1153];
-    // proof_string.copy(p, 1152, 0);
-    // *(p + 1152) = '\0';
+    //proof转字符串
+    std::string proof_string = string_proof_as_hex(proof);
 
-    return "";
+    char *p = new char[1153];
+    proof_string.copy(p, 1152, 0);
+    *(p + 1152) = '\0';
+
+    return p;
 }
 
-bool verifyWithdrawproof(char *data, char *RT, char *pk, char *cmtb_old, char *snold, char *cmtb)
+
+
+bool verifyWithdrawproof1(char *data, char *headerstr, char *pk, char *cmtb_old, char *snold, char *cmtb)
 {
-    uint256 rt = uint256S(RT);
+    uint256 header = uint256S(headerstr);
     uint160 pk_recv = uint160S(pk);
     uint256 cmtB_old = uint256S(cmtb_old);
     uint256 sn_old = uint256S(snold);
@@ -551,23 +570,22 @@ bool verifyWithdrawproof(char *data, char *RT, char *pk, char *cmtb_old, char *s
     proof.g_K.X = k_x;
     proof.g_K.Y = k_y;
 
-    bool result = 1
-    // verify_withdraw_proof(keypair.vk,
-    //                                    proof,
-    //                                    rt,
-    //                                    pk_recv,
-    //                                    cmtB_old,
-    //                                    sn_old,
-    //                                    cmtB);
+    bool result = verify_withdraw_proof(keypair.vk,
+                                       proof,
+                                       pk_recv,
+                                       cmtB_old,
+                                       sn_old,
+                                       cmtB,
+                                       header);
 
-    // if (!result)
-    // {
-    //     cout << "Verifying withdraw proof unsuccessfully!!!" << endl;
-    // }
-    // else
-    // {
-    //     cout << "Verifying withdraw proof successfully!!!" << endl;
-    // }
+    if (!result)
+    {
+        cout << "Verifying withdraw proof unsuccessfully!!!" << endl;
+    }
+    else
+    {
+        cout << "Verifying withdraw proof successfully!!!" << endl;
+    }
 
     return result;
 }

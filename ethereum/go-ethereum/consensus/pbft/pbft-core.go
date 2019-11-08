@@ -300,7 +300,7 @@ func newPbftCore(id uint64, config *viper.Viper, etf events.TimerFactory, com ch
 	}
 	instance.L = instance.logMultiplier * instance.K // log size
 	instance.viewChangePeriod = uint64(config.GetInt("general.viewchangeperiod"))
-
+	instance.viewChangePeriod = uint64(30)
 	instance.byzantine = config.GetBool("general.byzantine")
 
 	instance.requestTimeout, err = time.ParseDuration(config.GetString("general.timeout.request"))
@@ -312,6 +312,7 @@ func newPbftCore(id uint64, config *viper.Viper, etf events.TimerFactory, com ch
 		panic(fmt.Errorf("Cannot parse request timeout: %s", err))
 	}
 	instance.newViewTimeout, err = time.ParseDuration(config.GetString("general.timeout.viewchange"))
+	instance.newViewTimeout = 30 * time.Second
 	if err != nil {
 		panic(fmt.Errorf("Cannot parse new view timeout: %s", err))
 	}

@@ -30,6 +30,12 @@ add_library(
   deposit/depositcgo.cpp
 )
 
+add_library(
+  zk_withdraw
+  SHARED
+  withdraw/withdrawcgo.cpp
+)
+
 
 ###############################
 # 生成各个gadget的所需的pk，vk

@@ -700,6 +700,7 @@ type BlockHead struct {
 	TxRoot      common.Hash
 	StateRoot   common.Hash
 	FdRoot      common.Hash
+	Header      common.Hash
 	BlockNumber uint64
 }
 
@@ -715,6 +716,7 @@ type TxInBlock struct {
 }
 type FDPath struct {
 	Funds         []common.Hash
+	Fund          common.Hash
 	FundIndex     uint32
 	FundsRoot     common.Hash
 	BlockHeads    []BlockHead
@@ -724,18 +726,18 @@ type FDPath struct {
 	Depth         uint32
 }
 
-func (s *PublicTransactionPoolAPI) ExtractPath(proof []hexutil.Bytes) (FDPath, error) {
+func (s *PublicTransactionPoolAPI) ExtractPath(proof []hexutil.Bytes) (zktx.FDPath, error) {
 	return ExtractPathFromProof(proof)
 }
 
-func ExtractPathFromProof(proof []hexutil.Bytes) (FDPath, error) {
+func ExtractPathFromProof(proof []hexutil.Bytes) (zktx.FDPath, error) {
 	var err error
 
-	fdpath := FDPath{
+	fdpath := zktx.FDPath{
 		Funds:      make([]common.Hash, 0),
-		BlockHeads: make([]BlockHead, 0),
-		TxFields:   make([]TxField, 0),
-		TxInBlocks: make([]TxInBlock, 0),
+		BlockHeads: make([]zktx.BlockHead, 0),
+		TxFields:   make([]zktx.TxField, 0),
+		TxInBlocks: make([]zktx.TxInBlock, 0),
 	}
 
 	var blockhash common.Hash
@@ -758,10 +760,11 @@ func ExtractPathFromProof(proof []hexutil.Bytes) (FDPath, error) {
 	}
 	fdpath.FundsRoot = block1.Header().RootCMTfd
 	//blockhead
-	blockhead := BlockHead{
+	blockhead := zktx.BlockHead{
 		block1.Header().TxHash,
 		block1.Header().Root,
 		block1.Header().RootCMTfd,
+		block1.Header().Hash(),
 		block1.Header().Number.Uint64(),
 	}
 
@@ -776,13 +779,13 @@ func ExtractPathFromProof(proof []hexutil.Bytes) (FDPath, error) {
 			fmt.Println("decode block err", err)
 			return fdpath, errors.New("decode block err")
 		}
-		var txsinblock TxInBlock
+		var txsinblock zktx.TxInBlock
 		txs := block.Transactions()
 		for i := range txs {
 			txsinblock.Txs = append(txsinblock.Txs, txs[i].Hash())
 			if *(txs[i].Headers()[0]) == blockhash {
 				txsinblock.Txindex = uint32(i)
-				txfield := TxField{
+				txfield := zktx.TxField{
 					txs[i].ZKSN(),
 					txs[i].ZKCMTbal(),
 					blockhash,
@@ -792,10 +795,11 @@ func ExtractPathFromProof(proof []hexutil.Bytes) (FDPath, error) {
 		}
 		fdpath.TxInBlocks = append(fdpath.TxInBlocks, txsinblock)
 
-		blockhead = BlockHead{
+		blockhead = zktx.BlockHead{
 			block.Header().TxHash,
 			block.Header().Root,
 			block.Header().RootCMTfd,
+			block.Header().Hash(),
 			block.Header().Number.Uint64(),
 		}
 		blockhash = block.Hash()
@@ -869,13 +873,13 @@ func (s *PublicTransactionPoolAPI) SendWithdrawTransaction(ctx context.Context, 
 
 	newSN := zktx.NewRandomHash()
 	newRandom := zktx.NewRandomHash()
-	newValue := SN.Value + args.Value.ToInt().Uint64()
+	newValue := SN.Value + uint64(args.Fdvalue)
 
 	newCMT := zktx.GenCMT(newValue, newSN.Bytes(), newRandom.Bytes()) //tbd
 	tx.SetZKCMTbal(*newCMT)                                           //cmt
 
-	toadd := &DHibeAddress{args.ToID, args.ToIndex}
-	toAddress := toadd.Address()
+	// toadd := &DHibeAddress{args.ToID, args.ToIndex}
+	// toAddress := toadd.Address()
 
 	fromadd := &DHibeAddress{args.FromID, args.FromIndex}
 	fromAddress := fromadd.Address()
@@ -884,7 +888,7 @@ func (s *PublicTransactionPoolAPI) SendWithdrawTransaction(ctx context.Context, 
 	SNFD := common.HexToHash(args.Fdsn)
 	RFD := common.HexToHash(args.Fdrandom)
 	ValueFD := uint64(args.Fdvalue)
-	AddrFD := fromAddress
+	//AddrFD := fromAddress
 	CMTFD := common.HexToHash(args.Fdcmt)
 	SNbalFD := common.HexToHash(args.Fdsnbal)
 	path, err := ExtractPathFromProof(args.Proof)
@@ -893,7 +897,7 @@ func (s *PublicTransactionPoolAPI) SendWithdrawTransaction(ctx context.Context, 
 	}
 	fmt.Println("withdraw para")
 	//fmt.Println(SN.CMT, SN.Value, SN.Random, args.Value.ToInt().Uint64(), toAddress, SNFD, RFD, SN.SN, CMTFD, newValue, newSN, newRandom, newCMT)
-	zkProof := zktx.GenWithdrawProof(CMTFD, ValueFD, SNFD, RFD, SNbalFD, SN.Value, SN.CMT, SN.Random, SN.SN, newCMT, newSN, newRandom, toAddress.Bytes(), path)
+	zkProof := zktx.GenWithdrawProof(CMTFD, ValueFD, SNFD, RFD, SNbalFD, SN.Value, SN.CMT, SN.Random, SN.SN, newCMT, newSN, newRandom, fromAddress.Bytes(), path)
 	//genProofStart := time.Now()
 	//zktx.GenDepositProof(SN.Value, SN.Random, newSN, newRandom, SN.CMT, SN.SN, newCMT, newValue)
 
@@ -903,17 +907,18 @@ func (s *PublicTransactionPoolAPI) SendWithdrawTransaction(ctx context.Context, 
 	// if string(zkProof[0:10]) == "0000000000" {
 	// 	return common.Hash{}, errors.New("can't generate proof")
 	// }
+	tx.SetZKHeader(path.RootBlockHash)
 	tx.SetZKProof(zkProof)
 
 	fmt.Println("TX:", tx)
 	hash, err := submitZKTransaction(ctx, s.b, tx)
 
 	if err == nil {
-		zktx.SNFD = &zktx.Sequence{SN: SNFD, CMT: CMTFD, Random: RFD, Value: args.Value.ToInt().Uint64()}
+		zktx.SNFD = &zktx.Sequence{SN: &SNFD, CMT: &CMTFD, Random: &RFD, Value: args.Value.ToInt().Uint64()}
 		zktx.SequenceNumber = zktx.SequenceNumberAfter
 		zktx.SequenceNumberAfter = &zktx.Sequence{SN: newSN, CMT: newCMT, Random: newRandom, Value: newValue}
-		zktx.Stage = zktx.TxDeposit
-		SNS := zktx.SequenceS{*zktx.SequenceNumber, *zktx.SequenceNumberAfter, zktx.SNFD, nil, nil, zktx.TxDeposit}
+		zktx.Stage = zktx.TxWithdraw
+		SNS := zktx.SequenceS{*zktx.SequenceNumber, *zktx.SequenceNumberAfter, zktx.SNFD, nil, nil, zktx.TxWithdraw}
 		SNSBytes, err := rlp.EncodeToBytes(SNS)
 
 		if err != nil {
@@ -1625,7 +1630,7 @@ func getTransactionBlockData(chainDb ethdb.Database, txHash common.Hash) (common
 func (s *PublicTransactionPoolAPI) GetTxProofByHash(ctx context.Context, hash common.Hash) ([]hexutil.Bytes, error) {
 	blockHash, _, _, err := getTransactionBlockData(s.b.ChainDb(), hash)
 	if err != nil {
-		fmt.Println("Failed to retrieve transaction block", "hash", hash, "err", err)
+		fmt.Println("GetTxProofByHash Failed to retrieve transaction block", "hash", hash.Hex(), "err", err)
 		return nil, nil
 	}
 

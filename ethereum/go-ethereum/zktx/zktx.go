@@ -24,6 +24,7 @@ import (
 	"unsafe"
 
 	"github.com/ethereum/go-ethereum/crypto/ecies"
+	merkle "github.com/ethereum/go-ethereum/merkleTree"
 
 	"github.com/ethereum/go-ethereum/rlp"
 
@@ -165,22 +166,29 @@ func VerifyDepositProof(sna common.Hash, cmts common.Hash, proof []byte, cmtAold
 	return nil
 }
 
-var InvalidWithdrawProof = errors.New("Verifying Deposit proof failed!!!")
+var InvalidWithdrawProof = errors.New("Verifying Withdraw proof failed!!!")
 
-// func VerifyWithdrawProof(pk *ecdsa.PublicKey, rtcmt common.Hash, cmtb *common.Hash, snb *common.Hash, cmtbnew *common.Hash, proof []byte) error {
-// 	PK := crypto.PubkeyToAddress(*pk) //--zy
-// 	pk_c := C.CString(common.ToHex(PK[:]))
-// 	cproof := C.CString(string(proof))
-// 	rtmCmt := C.CString(common.ToHex(rtcmt[:]))
-// 	cmtB := C.CString(common.ToHex(cmtb[:]))
-// 	cmtBnew := C.CString(common.ToHex(cmtbnew[:]))
-// 	SNB_c := C.CString(common.ToHex(snb.Bytes()[:]))
-// 	tf := C.verifyDepositproof(cproof, rtmCmt, pk_c, cmtB, SNB_c, cmtBnew)
-// 	if tf == false {
-// 		return InvalidDepositProof
-// 	}
-// 	return nil
-// }
+func VerifyWithdrawProof(cmtid common.Address, header common.Hash, cmtb common.Hash, snb common.Hash, cmtbnew common.Hash, proof []byte) error {
+
+	pk_c := C.CString(common.ToHex(cmtid[:]))
+	cproof := C.CString(string(proof))
+	header_c := C.CString(common.ToHex(header[:]))
+	cmtB := C.CString(common.ToHex(cmtb[:]))
+	cmtBnew := C.CString(common.ToHex(cmtbnew[:]))
+	SNB_c := C.CString(common.ToHex(snb.Bytes()[:]))
+
+	fmt.Println("zktx.go VerifyWithdrawProof header ", header_c)
+	fmt.Println("zktx.go VerifyWithdrawProof fdid ", pk_c)
+	fmt.Println("zktx.go VerifyWithdrawProof cmtB ", cmtB)
+	fmt.Println("zktx.go VerifyWithdrawProof SNB ", SNB_c)
+	fmt.Println("zktx.go VerifyWithdrawProof cmtBnew ", cmtBnew)
+
+	tf := C.verifyWithdrawproof1(cproof, header_c, pk_c, cmtB, SNB_c, cmtBnew)
+	if tf == false {
+		return InvalidWithdrawProof
+	}
+	return nil
+}
 
 func VerifyDepositSIG(x *big.Int, y *big.Int, sig []byte) error {
 	return nil
@@ -416,6 +424,7 @@ type BlockHead struct {
 	TxRoot      common.Hash
 	StateRoot   common.Hash
 	FdRoot      common.Hash
+	Header      common.Hash
 	BlockNumber uint64
 }
 
@@ -440,7 +449,10 @@ type FDPath struct {
 	Depth         uint32
 }
 
-func GenWithdrawProof1(CMTS *common.Hash, ValueS uint64, SNS *common.Hash, RS *common.Hash, SNA *common.Hash, ValueB uint64, CMTB *common.Hash, RB *common.Hash, SNB *common.Hash, CMTBnew *common.Hash, SNBnew *common.Hash, RBnew *common.Hash, toaddress []byte, path FDPath) []byte {
+func GenWithdrawProof1(CMTS common.Hash, ValueS uint64, SNS common.Hash, RS common.Hash, SNA common.Hash, ValueB uint64, CMTB common.Hash, RB common.Hash, SNB common.Hash, CMTBnew common.Hash, SNBnew common.Hash, RBnew common.Hash, toaddress []byte, path FDPath) []byte {
+	block1 := path.BlockHeads[0]
+	txrootstring := C.CString(common.ToHex(block1.TxRoot[:]))
+	staterootstring := C.CString(common.ToHex(block1.StateRoot[:]))
 	RTcmt := path.FundsRoot
 	cmtS_c := C.CString(common.ToHex(CMTS[:]))
 	valueS_c := C.ulong(ValueS)
@@ -454,57 +466,47 @@ func GenWithdrawProof1(CMTS *common.Hash, ValueS uint64, SNS *common.Hash, RS *c
 	SNBnew_c := C.CString(common.ToHex(SNBnew.Bytes()[:]))
 	RBnew_c := C.CString(common.ToHex(RBnew.Bytes()[:]))
 	cmtB_c := C.CString(common.ToHex(CMTB[:]))
-	RT_c := C.CString(common.ToHex(RTcmt.Bytes())) //--zy   rt
+	fdrootstring := C.CString(common.ToHex(RTcmt.Bytes())) //--zy   rt
 
 	cmtBnew_c := C.CString(common.ToHex(CMTBnew[:]))
 	valueBNew_c := C.ulong(ValueB + ValueS)
 
+	headerstring := C.CString(common.ToHex(block1.Header[:]))
 	CMTSForMerkle := path.Funds
 
 	var cmtArray string
+	fmt.Println("zktx.go  CMTSForMerkle")
 	for i := 0; i < len(CMTSForMerkle); i++ {
 		s := string(common.ToHex(CMTSForMerkle[i][:]))
 		cmtArray += s
+		fmt.Println(s)
 	}
+	for i := len(CMTSForMerkle); i < merkle.ZkfundsMerkleNODES; i++ {
+		cmtArray += "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+		fmt.Println("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+	}
+
 	cmtsM := C.CString(cmtArray)
 	nC := C.int(len(CMTSForMerkle))
 
-	cproof := C.genWithdrawproof(valueBNew_c, valueB_c, SNB_c, RB_c, SNBnew_c, RBnew_c, SNS_c, RS_c, cmtB_c, cmtBnew_c, valueS_c, pk_c, SNA_c, cmtS_c, cmtsM, nC, RT_c)
+	fmt.Println("zktx.go  fdroot", fdrootstring)
+	fmt.Println("zktx.go  txroot", txrootstring)
+	fmt.Println("zktx.go  stateroot", staterootstring)
+	fmt.Println("zktx.go  header", headerstring)
+
+	cproof := C.genWithdrawproof1(txrootstring, staterootstring, valueBNew_c, valueB_c, SNB_c, RB_c, SNBnew_c, RBnew_c, SNS_c, RS_c, cmtB_c, cmtBnew_c, valueS_c, pk_c, SNA_c, cmtS_c, cmtsM, nC, headerstring)
 	var goproof string
 	goproof = C.GoString(cproof)
 	return []byte(goproof)
 }
 
-func GenWithdrawProof(CMTS *common.Hash, ValueS uint64, SNS *common.Hash, RS *common.Hash, SNA *common.Hash, ValueB uint64, CMTB *common.Hash, RB *common.Hash, SNB *common.Hash, CMTBnew *common.Hash, SNBnew *common.Hash, RBnew *common.Hash, toaddress []byte, path FDPath) []byte {
-	cmtS_c := C.CString(common.ToHex(CMTS[:]))
-	valueS_c := C.ulong(ValueS)
-	pk_c := C.CString(common.ToHex(toaddress[:]))
-	SNS_c := C.CString(common.ToHex(SNS.Bytes()[:])) //--zy
-	RS_c := C.CString(common.ToHex(RS.Bytes()[:]))   //--zy
-	SNA_c := C.CString(common.ToHex(SNA.Bytes()[:]))
-	valueB_c := C.ulong(ValueB)
-	RB_c := C.CString(common.ToHex(RB.Bytes()[:])) //rA_c := C.CString(string(RA.Bytes()[:]))
-	SNB_c := C.CString(common.ToHex(SNB.Bytes()[:]))
-	SNBnew_c := C.CString(common.ToHex(SNBnew.Bytes()[:]))
-	RBnew_c := C.CString(common.ToHex(RBnew.Bytes()[:]))
-	cmtB_c := C.CString(common.ToHex(CMTB[:]))
-	RT_c := C.CString(common.ToHex(RTcmt)) //--zy   rt
-
-	cmtBnew_c := C.CString(common.ToHex(CMTBnew[:]))
-	valueBNew_c := C.ulong(ValueB + ValueS)
-
-	var cmtArray string
-	for i := 0; i < len(CMTSForMerkle); i++ {
-		s := string(common.ToHex(CMTSForMerkle[i][:]))
-		cmtArray += s
+func GenWithdrawProof(CMTS common.Hash, ValueS uint64, SNS common.Hash, RS common.Hash, SNA common.Hash, ValueB uint64, CMTB *common.Hash, RB *common.Hash, SNB *common.Hash, CMTBnew *common.Hash, SNBnew *common.Hash, RBnew *common.Hash, toaddress []byte, path FDPath) []byte {
+	var proof []byte
+	switch path.Depth {
+	case 1:
+		proof = GenWithdrawProof1(CMTS, ValueS, SNS, RS, SNA, ValueB, *CMTB, *RB, *SNB, *CMTBnew, *SNBnew, *RBnew, toaddress, path)
 	}
-	cmtsM := C.CString(cmtArray)
-	nC := C.int(len(CMTSForMerkle))
-
-	cproof := C.genWithdrawproof(valueBNew_c, valueB_c, SNB_c, RB_c, SNBnew_c, RBnew_c, SNS_c, RS_c, cmtB_c, cmtBnew_c, valueS_c, pk_c, SNA_c, cmtS_c, cmtsM, nC, RT_c)
-	var goproof string
-	goproof = C.GoString(cproof)
-	return []byte(goproof)
+	return proof
 }
 
 func GenR() *ecdsa.PrivateKey {

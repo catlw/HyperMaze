@@ -85,7 +85,7 @@ public:
             zk_packed_inputs.allocate(pb, verifying_field_element_size()); 
             this->pb.set_input_sizes(verifying_field_element_size());
             alloc_uint256(zk_unpacked_inputs, header);
-            alloc_uint256(zk_unpacked_inputs, zk_merkle_root); // 追加merkle_root到zk_unpacked_inputs
+            //alloc_uint256(zk_unpacked_inputs, zk_merkle_root); // 追加merkle_root到zk_unpacked_inputs
             alloc_uint160(zk_unpacked_inputs, pk_recv);
             alloc_uint256(zk_unpacked_inputs, cmtB_old);
             alloc_uint256(zk_unpacked_inputs, sn_old);
@@ -175,7 +175,7 @@ public:
         witness_input.reset(new merkle_tree_gadget<FieldT>(
             pb,
             *cmtS,
-            *zk_merkle_root,
+            *fd_root,
             value_enforce
         ));
 
@@ -187,6 +187,7 @@ public:
             fd_root->bits,
             header
         ));
+
     }
 
     // 约束函数，为commitment_with_add_and_less_gadget的变量生成约束
@@ -216,9 +217,11 @@ public:
         commit_to_inputs_cmt->generate_r1cs_constraints();
 
         // Merkle constraint
-        zk_merkle_root->generate_r1cs_constraints();
+        //zk_merkle_root->generate_r1cs_constraints();
         generate_boolean_r1cs_constraint<FieldT>(this->pb, value_enforce,"");
         witness_input->generate_r1cs_constraints();
+
+
     }
 
     // 证据函数，为commitment_with_add_and_less_gadget的变量生成证据
@@ -226,6 +229,7 @@ public:
         const NoteS& note_s, 
         const Note& note_old, 
         const Note& note, 
+        const NoteHeader& noteheader,
         uint256 cmtS_data,
         uint256 cmtB_old_data,
         uint256 cmtB_data,
@@ -235,9 +239,9 @@ public:
     ) {
         noteADD->generate_r1cs_witness(note_s, note_old, note);
 
-        tx_root->bits.fill_with_bits(this->pb, uint256_to_bool_vector(uint256S("1")));
-        state_root->bits.fill_with_bits(this->pb, uint256_to_bool_vector(uint256S("2")));
-        fd_root->bits.fill_with_bits(this->pb, uint256_to_bool_vector(uint256S("3")));
+        tx_root->bits.fill_with_bits(this->pb, uint256_to_bool_vector(noteheader.tx_root));
+        state_root->bits.fill_with_bits(this->pb, uint256_to_bool_vector(noteheader.state_root));
+        fd_root->bits.fill_with_bits(this->pb, uint256_to_bool_vector(noteheader.cmtfd_root));
         
         // Set enforce flag for nonzero input value
         this->pb.val(value_enforce) = (note_s.value != 0) ? FieldT::one() : FieldT::zero();
@@ -275,10 +279,10 @@ public:
         // This ensures the read gadget constrains
         // the intended root in the event that
         // both inputs are zero-valued.
-        zk_merkle_root->bits.fill_with_bits(  // merkle_root填充
-            this->pb,
-            uint256_to_bool_vector(rt)
-        );
+        // zk_merkle_root->bits.fill_with_bits(  // merkle_root填充
+        //     this->pb,
+        //     uint256_to_bool_vector(rt)
+        // );
 
         // This happens last, because only by now are all the verifier inputs resolved.
         unpacker->generate_r1cs_witness_from_bits();
@@ -287,7 +291,7 @@ public:
     // 将bit形式的私密输入 打包转换为 域上的元素
     static r1cs_primary_input<FieldT> witness_map(
         const uint256& header,
-        const uint256& rt,
+        //const uint256& rt,
         const uint160& pk_recv,
         const uint256& cmtB_old,
         const uint256& sn_old,
@@ -295,7 +299,7 @@ public:
     ) {
         std::vector<bool> verify_inputs;
         insert_uint256(verify_inputs, header);
-        insert_uint256(verify_inputs, rt);
+        //insert_uint256(verify_inputs, rt);
         insert_uint160(verify_inputs, pk_recv);
         insert_uint256(verify_inputs, cmtB_old);
         insert_uint256(verify_inputs, sn_old);
@@ -311,7 +315,7 @@ public:
     static size_t verifying_input_bit_size() {
         size_t acc = 0;
         acc += 256;
-        acc += 256; // merkle root
+        //acc += 256; // merkle root
         acc += 160; // pk_recv
         acc += 256; // cmtB_old
         acc += 256; // sn_old

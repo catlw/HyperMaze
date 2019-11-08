@@ -103,6 +103,7 @@ type txdata struct {
 	Payload      []byte          `json:"input"    gencodec:"required"`
 	Level        uint32          `json:"level"    gencodec:"required"`
 	Headers      []*common.Hash  `json:"headers"    gencodec:"required"`
+	ZKHeader     common.Hash     `json:"zkheader"    gencodec:"required"`
 	CrossTxProof [][]byte
 	// Signature values
 	V                   *big.Int `json:"v" gencodec:"required"`
@@ -382,6 +383,14 @@ func (tx *Transaction) SetNounce(nounce uint64) {
 
 func (tx *Transaction) Headers() []*common.Hash {
 	return tx.data.Headers
+}
+
+func (tx *Transaction) SetZKHeader(header common.Hash) {
+	tx.data.ZKHeader = header
+}
+
+func (tx *Transaction) ZKHeader() common.Hash {
+	return tx.data.ZKHeader
 }
 
 func (tx *Transaction) WithHibeSig(sig []byte) {
